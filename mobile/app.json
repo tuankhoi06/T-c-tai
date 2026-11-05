@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "HairMatch",
+    "slug": "hairmatch",
+    "version": "1.0.0",
+    "scheme": "hairmatch",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "HairMatch cần chọn ảnh để tư vấn kiểu tóc.",
+          "cameraPermission": "HairMatch cần camera để chụp ảnh tư vấn kiểu tóc.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.hairmatch"
+    },
+    "android": {
+      "package": "com.example.hairmatch"
+    }
+  }
+}
+
