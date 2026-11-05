@@ -99,5 +99,50 @@ describe("Booking", () => {
       })
     ).rejects.toMatchObject({ status: 400 });
   });
+
+  it("Khách chỉ được hủy lịch trong 1 ngày khi còn chờ duyệt, không được hủy khi đã được admin duyệt", async () => {
+    const repo = new MemoryRepository();
+    await repo.seed();
+    const booking = new BookingService(repo);
+    const customer = repo.users.get("customer-demo")!;
+
+    const tomorrow = DateTime.now().setZone(SHOP_ZONE).plus({ days: 1 }).toISODate()!;
+    const slots = booking.availability("barber-1", "cut", tomorrow);
+
+    // 1. Tạo lịch mới -> được phép hủy
+    const appt = await booking.create(customer, {
+      barberId: "barber-1",
+      serviceId: "cut",
+      startAt: slots[0]
+    });
+    const cancelled = booking.cancel(customer, appt.id);
+    expect(cancelled.status).toBe("cancelled");
+
+    // 2. Lịch đã được admin duyệt sang confirmed -> Không được phép hủy
+    const appt2 = await booking.create(customer, {
+      barberId: "barber-1",
+      serviceId: "cut",
+      startAt: slots[1]
+    });
+    booking.changeStatus(appt2.id, "confirmed");
+    expect(() => booking.cancel(customer, appt2.id)).toThrowError(
+      expect.objectContaining({ status: 409 })
+    );
+
+    // 3. Lịch đã quá 24h kể từ khi tạo -> Không được phép hủy
+    const appt3 = await booking.create(customer, {
+      barberId: "barber-1",
+      serviceId: "cut",
+      startAt: slots[2]
+    });
+    // Giả lập lịch tạo từ 2 ngày trước
+    const oldAppt = repo.appointments.get(appt3.id)!;
+    oldAppt.createdAt = DateTime.now().minus({ days: 2 }).toISO()!;
+    repo.appointments.put(oldAppt);
+
+    expect(() => booking.cancel(customer, appt3.id)).toThrowError(
+      expect.objectContaining({ status: 409 })
+    );
+  });
 });
 

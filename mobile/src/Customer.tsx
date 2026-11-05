@@ -628,8 +628,12 @@ export function Customer({ user, onLogout, onUserUpdated }: CustomerProps) {
                   </Card>
                 ) : (
                   filteredAppointments.map((appt) => {
+                    const isWithinOneDay = appt.createdAt
+                      ? Date.now() - new Date(appt.createdAt).getTime() <= 24 * 60 * 60 * 1000
+                      : true;
                     const canCancel =
-                      (appt.status === "pending" || appt.status === "confirmed") &&
+                      appt.status === "pending" &&
+                      isWithinOneDay &&
                       new Date(appt.startAt).getTime() > Date.now();
                     return (
                       <Card key={appt.id}>
@@ -660,7 +664,7 @@ export function Customer({ user, onLogout, onUserUpdated }: CustomerProps) {
                         <Text style={[styles.text, { color: colors.gold, fontWeight: "700" }]}>
                           Giá: {money(appt.priceSnapshot)}
                         </Text>
-                        {canCancel && (
+                        {canCancel ? (
                           <View style={{ marginTop: 8 }}>
                             <Button
                               title="Hủy lịch hẹn"
@@ -669,7 +673,15 @@ export function Customer({ user, onLogout, onUserUpdated }: CustomerProps) {
                               disabled={loading}
                             />
                           </View>
-                        )}
+                        ) : appt.status === "confirmed" ? (
+                          <Text style={[styles.muted, { fontSize: 12, color: colors.gold, marginTop: 6 }]}>
+                            🔒 Lịch đã được Admin duyệt (Không thể tự hủy. Vui lòng liên hệ hotline nếu cần đổi)
+                          </Text>
+                        ) : appt.status === "pending" && !isWithinOneDay ? (
+                          <Text style={[styles.muted, { fontSize: 12, color: colors.muted, marginTop: 6 }]}>
+                            ⏳ Đã quá thời hạn 1 ngày kể từ khi đặt lịch (Không thể tự hủy)
+                          </Text>
+                        ) : null}
                       </Card>
                     );
                   })

@@ -227,10 +227,17 @@ export class BookingService {
     );
 
     ensure(
-      appointment.status === "pending" ||
-        appointment.status === "confirmed",
+      appointment.status === "pending",
       409,
-      "Trạng thái lịch không cho phép hủy."
+      "Lịch hẹn đã được Admin xác nhận hoặc đã hoàn tất, không thể tự hủy. Vui lòng liên hệ salon."
+    );
+
+    const createdTime = DateTime.fromISO(appointment.createdAt);
+    const hoursSinceCreation = DateTime.now().diff(createdTime, "hours").hours;
+    ensure(
+      hoursSinceCreation <= 24,
+      409,
+      "Đã quá thời hạn 1 ngày kể từ khi đặt lịch, không thể tự hủy. Vui lòng liên hệ salon."
     );
 
     ensure(

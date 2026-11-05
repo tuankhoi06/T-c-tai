@@ -1,3 +1,4 @@
+
 export type Role = "customer" | "admin";
 
 export type AppointmentStatus =
@@ -117,3 +118,4 @@ export interface Statistics {
   cancelled: number;
   revenue: number;
 }
+
