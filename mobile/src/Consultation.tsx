@@ -121,6 +121,15 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
         timeoutMs: 45000
       });
 
+      if (!res.imageAssessment.suitable) {
+        setError(
+          res.imageAssessment.message ||
+            "Ảnh không nhận diện được khuôn mặt người trực diện. Vui lòng chụp lại ảnh khuôn mặt rõ nét."
+        );
+        setResult(null);
+        return;
+      }
+
       setResult(res);
     } catch (err: any) {
       setError(err.message || "Tư vấn AI thất bại. Vui lòng thử lại.");

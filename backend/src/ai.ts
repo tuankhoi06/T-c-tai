@@ -254,11 +254,159 @@ Luôn có disclaimer:
   }
 }
 
+class GeminiProvider implements AIProvider {
+  private key = config.GEMINI_API_KEY;
+  private model = config.AI_MODEL || "gemini-3.5-flash-lite";
+
+  async consult(
+    image: Buffer,
+    preferences: Preferences
+  ): Promise<Consultation> {
+    try {
+      const prompt = `
+Bạn là chuyên gia tư vấn kiểu tóc bằng tiếng Việt cho tiệm tóc HairMatch.
+Nhiệm vụ bắt buộc: KIỂM TRA NHẬN DIỆN KHUÔN MẶT NGƯỜI TRONG ẢNH.
+
+QUY TẮC NHẬN DIỆN:
+1. Nếu ảnh KHÔNG CÓ khuôn mặt người rõ ràng (ví dụ: ảnh phong cảnh, ảnh động vật, ảnh đồ vật, ảnh quá mờ, bị che kín, hoặc không thể nhận diện được ngũ quan khuôn mặt):
+   - imageAssessment: { suitable: false, message: "Không phát hiện khuôn mặt người trực diện hoặc ảnh chưa đủ độ nét. Vui lòng chọn hoặc chụp ảnh khuôn mặt người trực diện." }
+   - faceShapeEstimate: "unknown"
+   - observations: []
+   - haircutRecommendations: []
+   - colorAdvice: { recommendation: "Chưa đủ dữ liệu.", suggestedColors: [], reason: "Cần ảnh khuôn mặt để tư vấn màu sắc." }
+   - permAdvice: { recommendation: "Chưa đủ dữ liệu.", reason: "Cần ảnh khuôn mặt để tư vấn uốn." }
+   - limitations: ["Ảnh không chứa khuôn mặt người hợp lệ."]
+   - disclaimer: "${disclaimer}"
+
+2. Nếu ảnh CÓ khuôn mặt người trực diện rõ nét:
+   - imageAssessment: { suitable: true, message: "Ảnh khuôn mặt rõ nét, đạt chuẩn phân tích." }
+   - faceShapeEstimate: Ước lượng dáng khuôn mặt (ví dụ: Mặt trái xoan (Oval), Mặt tròn, Mặt vuông chữ điền, Mặt dài, Mặt kim cương, Mặt trái tim).
+   - observations: Mảng các nhận xét ngắn gọn về tỷ lệ khuôn mặt, trán, cằm, xương hàm.
+   - haircutRecommendations: Đúng 3 gợi ý kiểu tóc phù hợp nhất với khuôn mặt và sở thích:
+     + name: Tên kiểu tóc (ví dụ: Layer Texture Rủ Nhẹ, Side Part 7/3 Cổ Điển, Modern Mullet...)
+     + reason: Lý do vì sao kiểu này tôn dáng mặt của người trong ảnh
+     + length: Độ dài đề xuất (ví dụ: Ngắn, Trung bình, Gọn gàng)
+     + maintenance: Mức độ chăm sóc (Thấp / Trung bình / Cao)
+     + barberNote: Lưu ý kỹ thuật cụ thể để khách trao đổi với thợ cắt tóc
+   - colorAdvice: Gợi ý màu tóc (recommendation, suggestedColors (mảng string), reason) phù hợp sở thích người dùng.
+   - permAdvice: Gợi ý uốn tóc (recommendation, reason).
+   - limitations: Các hạn chế phân tích từ ảnh 2D.
+   - disclaimer: "${disclaimer}"
+
+THÔNG TIN SỞ THÍCH CỦA KHÁCH HÀNG:
+- Độ dài tóc hiện tại: ${preferences.hairLength || "Tự nhiên"}
+- Độ dài mong muốn: ${preferences.desiredLength || "Gọn gàng"}
+- Chất tóc: ${preferences.hairTexture || "Thẳng tự nhiên"}
+- Mật độ tóc: ${preferences.hairDensity || "Dày vừa phải"}
+- Phong cách mong muốn: ${preferences.preferredStyle || "Hiện đại"}
+- Mức chăm sóc: ${preferences.maintenanceLevel || "medium"}
+- Muốn nhuộm: ${preferences.wantsDye ? "Có" : "Không"}
+- Muốn uốn: ${preferences.wantsPerm ? "Có" : "Không"}
+- Tình trạng tóc: ${preferences.hairCondition || "Bình thường"}
+
+YÊU CẦU:
+- Không suy đoán danh tính, tuổi tác, giới tính hoặc thông tin nhạy cảm.
+- Không chấm điểm đẹp/xấu.
+- Không chẩn đoán bệnh lý tóc/da đầu.
+- Trả về ĐÚNG ĐỊNH DẠNG JSON theo cấu trúc trên.
+`;
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.key}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: image.toString("base64")
+                  }
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini API error:", response.status, errorText);
+        throw new AppError(
+          502,
+          `Gemini API lỗi (${response.status}): Vui lòng kiểm tra API key hoặc hạn mức.`
+        );
+      }
+
+      const data = (await response.json()) as any;
+      const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      ensure(textOutput, 502, "Gemini không trả về kết quả phân tích.");
+
+      let parsedJson: any;
+      try {
+        parsedJson = JSON.parse(textOutput);
+      } catch {
+        throw new AppError(502, "Kết quả từ AI không đúng định dạng JSON.");
+      }
+
+      const result = consultationSchema.parse(parsedJson);
+
+      if (result.imageAssessment.suitable) {
+        ensure(
+          result.haircutRecommendations.length === 3,
+          502,
+          "AI trả số lượng gợi ý không hợp lệ (cần đúng 3 kiểu)."
+        );
+      } else {
+        result.faceShapeEstimate = "unknown";
+        result.observations = [];
+        result.haircutRecommendations = [];
+        result.colorAdvice = {
+          recommendation: "Chưa đủ dữ liệu.",
+          suggestedColors: [],
+          reason: "Vui lòng chụp lại ảnh khuôn mặt trực diện rõ nét."
+        };
+        result.permAdvice = {
+          recommendation: "Chưa đủ dữ liệu.",
+          reason: "Vui lòng chụp lại ảnh khuôn mặt trực diện rõ nét."
+        };
+      }
+
+      result.disclaimer = disclaimer;
+      return result;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        502,
+        "Không thể phân tích bằng AI: " +
+          (error instanceof Error ? error.message : "Lỗi kết nối")
+      );
+    }
+  }
+}
+
 export class ConsultationService {
-  private provider: AIProvider =
-    config.AI_MODE === "live"
-      ? new OpenAIProvider()
-      : new MockProvider();
+  private provider: AIProvider;
+
+  constructor() {
+    if (config.AI_MODE === "live") {
+      if (config.GEMINI_API_KEY) {
+        this.provider = new GeminiProvider();
+      } else if (config.OPENAI_API_KEY) {
+        this.provider = new OpenAIProvider();
+      } else {
+        this.provider = new MockProvider();
+      }
+    } else {
+      this.provider = new MockProvider();
+    }
+  }
 
   async consult(
     buffer: Buffer,
