@@ -7,16 +7,16 @@ import { config } from "./config.js";
 import { AppError, ensure } from "./errors.js";
 
 export const preferencesSchema = z.object({
-  hairLength: z.string().max(100),
-  desiredLength: z.string().max(100),
-  hairTexture: z.string().max(100),
-  hairDensity: z.string().max(100),
-  preferredStyle: z.string().max(200),
-  maintenanceLevel: z.enum(["low", "medium", "high"]),
-  wantsDye: z.boolean(),
-  wantsPerm: z.boolean(),
-  hairCondition: z.string().max(300)
-});
+  hairLength: z.string().max(100).optional().default(""),
+  desiredLength: z.string().max(100).optional().default(""),
+  hairTexture: z.string().max(100).optional().default(""),
+  hairDensity: z.string().max(100).optional().default(""),
+  preferredStyle: z.string().max(200).optional().default(""),
+  maintenanceLevel: z.enum(["low", "medium", "high"]).optional().default("medium"),
+  wantsDye: z.boolean().optional().default(false),
+  wantsPerm: z.boolean().optional().default(false),
+  hairCondition: z.string().max(300).optional().default("")
+}).default({});
 
 export type Preferences = z.infer<typeof preferencesSchema>;
 
@@ -306,44 +306,33 @@ QUY TẮC NHẬN DIỆN VÀ ĐÁNH GIÁ ẢNH:
 
 2. Nếu ảnh CÓ khuôn mặt người trực diện rõ nét:
    - imageAssessment: { suitable: true, message: "Ảnh chụp phù hợp để tư vấn sơ bộ." }
-   - faceShapeEstimate: Không khẳng định tuyệt đối. Dùng cách diễn đạt chừng mực: "Dáng mặt có nét gần [Trái xoan / Tròn / Vuông / Dài / Kim cương / Trái tim], ước lượng từ ảnh 2D."
-   - observations: Mảng các nhận xét khách quan:
-     + Nhận xét hình học tỷ lệ (ví dụ: "Tỷ lệ chiều dài và chiều ngang khuôn mặt khá cân đối", "Đường viền trán và cằm có độ bo nhẹ").
-     + TUYỆT ĐỐI KHÔNG dùng từ ngữ khen ngợi chủ quan, cảm tính như "thanh tú", "dịu dàng, nữ tính", "quyến rũ".
-     + Với các thông tin do khách cung cấp: Bắt buộc ghi "Theo thông tin bạn cung cấp: Mật độ tóc ${preferences.hairDensity || "vừa phải"}, chất tóc ${preferences.hairTexture || "tự nhiên"}." Tuyệt đối không trình bày như thể AI đã soi kính hiển vi để xác minh chất tóc qua ảnh.
+   - faceShapeEstimate: Nhận định dáng mặt chừng mực: "Dáng mặt có nét gần [Trái xoan / Tròn / Vuông / Dài / Kim cương / Trái tim], ước lượng từ ảnh 2D."
+   - observations: Mảng nhận xét khách quan về hình học tỷ lệ: chiều dài, chiều ngang, xương hàm, trán, cằm, và nhận định sơ bộ về mái tóc hiện tại quan sát thấy trong ảnh (ví dụ: độ dài tóc hiện tại trong ảnh khoảng ngang vai/ngắn/dài, phom tóc tự nhiên). Tuyệt đối không dùng từ ngữ khen ngợi chủ quan, cảm tính như "thanh tú", "dịu dàng, nữ tính".
 
-QUY TẮC BẮT BUỘC VỀ ĐỘ DÀI TÓC (RẤT QUAN TRỌNG):
-- Độ dài tóc hiện tại của khách: "${preferences.hairLength || "Chưa rõ"}"
-- Độ dài mong muốn của khách: "${preferences.desiredLength || "Gọn gàng"}"
-- KIỂM TRA TÍNH KHẢ THI (FEASIBILITY):
-  + Nếu độ dài tóc hiện tại là "Ngắn" (hoặc ngắn hơn kiểu tóc đề xuất): TUYỆT ĐỐI KHÔNG ĐƯỢC đề xuất toàn các kiểu tóc dài mà coi như làm được ngay tại tiệm.
-  + Trong 3 kiểu đề xuất:
-    * Ít nhất 2 kiểu BẮT BUỘC phải thực hiện được ngay với độ dài tóc hiện tại (feasibility: "Thực hiện được ngay với độ dài tóc hiện tại").
-    * Nếu có 1 kiểu dài hơn để định hướng tương lai, trường feasibility BẮT BUỘC phải ghi rõ: "Cần nuôi tóc thêm X tháng (hiện tại tóc ngắn chưa thể làm ngay)".
-  + Nếu khách có độ dài mong muốn cụ thể: Bắt buộc ưu tiên tối đa độ dài mong muốn đó!
-
-QUY TẮC VỀ 3 KIỂU TÓC (PHẢI THUỘC 3 HƯỚNG KHÁC NHAU RÕ RỆT):
-- Gợi ý #1 (direction: "Ít thay đổi, dễ chăm sóc"): Kiểu tóc tự nhiên, tối ưu theo độ dài hiện tại, tốn rất ít công sấy vuốt mỗi ngày (feasibility: "Thực hiện được ngay với độ dài tóc hiện tại", stylingMethod: "Chỉ cần sấy khô tự nhiên tại nhà, không cần hóa chất", suggestedService: "Cắt tóc").
-- Gợi ý #2 (direction: "Thay đổi vừa phải, thanh lịch thường ngày"): Kiểu tóc gọn gàng, thanh lịch, phù hợp công sở/học tập và sinh hoạt hàng ngày (stylingMethod: phân biệt rõ sấy phom hay uốn nhẹ, suggestedService: dịch vụ tiệm tương ứng).
-- Gợi ý #3 (direction: "Thay đổi nổi bật, phong cách hơn"): Kiểu tóc tạo điểm nhấn rõ rệt (uốn phom, tỉa layer tầng sắc nét hoặc vuốt nếp thời trang), nhưng vẫn bám sát độ dài mong muốn.
-Mỗi kiểu tóc gồm các trường:
-- name: Tên kiểu tóc
-- direction: Hướng phong cách (như trên)
-- reason: Lý do cụ thể liên quan tới tỷ lệ khuôn mặt và độ dài tóc
-- length: Độ dài của kiểu tóc
-- feasibility: Tính khả thi (Làm được ngay với tóc hiện tại / Cần nuôi thêm tóc)
-- stylingMethod: Phân biệt rõ (Chỉ sấy tạo phom tại nhà / Uốn hóa chất tại salon / Tạo kiểu bằng máy kẹp)
-- maintenance: Mức chăm sóc (Thấp / Trung bình / Cao)
-- suggestedService: Tên dịch vụ tiệm tương ứng ("Cắt tóc", "Uốn tóc", hoặc "Gội và chăm sóc tóc")
-- barberNote: Lưu ý kỹ thuật cụ thể để khách trao đổi trực tiếp với thợ tại salon
+QUY TẮC QUAN SÁT TÓC VÀ ĐỀ XUẤT 3 KIỂU TÓC PHÙ HỢP:
+- Tự động nhìn độ dài tóc hiện tại của người trong ảnh (ngắn, ngang cằm, ngang vai, hay dài qua vai).
+- Đề xuất đúng 3 phương án kiểu tóc tối ưu cho dáng mặt theo 3 hướng phong cách:
+  + Gợi ý #1 (direction: "Ít thay đổi, dễ chăm sóc"): Kiểu tóc tự nhiên, tối ưu theo độ dài tóc hiện tại quan sát thấy trong ảnh, sấy tự nhiên tại nhà, tốn ít công chăm sóc mỗi ngày.
+  + Gợi ý #2 (direction: "Thay đổi vừa phải, thanh lịch thường ngày"): Kiểu tóc gọn gàng, thanh lịch, phù hợp công sở/học tập và sinh hoạt hàng ngày, tôn dáng khuôn mặt.
+  + Gợi ý #3 (direction: "Thay đổi nổi bật, phong cách hơn"): Kiểu tóc tạo điểm nhấn phong cách, uốn phom hoặc tỉa layer thời trang tôn đường nét khuôn mặt.
+  Mỗi kiểu tóc gồm các trường:
+  - name: Tên kiểu tóc
+  - direction: Hướng phong cách (như trên)
+  - reason: Lý do cụ thể vì sao kiểu này tôn dáng mặt của người trong ảnh
+  - length: Độ dài đề xuất (Ngắn / Ngang vai / Dài)
+  - feasibility: Tính khả thi (ví dụ: "Thực hiện được ngay với độ dài tóc hiện tại" hoặc "Cần nuôi tóc thêm ...")
+  - stylingMethod: Phân biệt rõ cách tạo kiểu (Chỉ sấy phom tại nhà / Uốn hóa chất tại salon / Vuốt sáp)
+  - maintenance: Mức chăm sóc (Thấp / Trung bình / Cao)
+  - suggestedService: Tên dịch vụ tiệm tương ứng ("Cắt tóc", "Uốn tóc", hoặc "Gội và chăm sóc tóc")
+  - barberNote: Lưu ý kỹ thuật cụ thể để khách trao đổi trực tiếp với thợ tại salon
 
 TƯ VẤN NHUỘM VÀ UỐN:
-- colorAdvice: Phân tích dựa trên mong muốn nhuộm (${preferences.wantsDye ? "Có" : "Không"}).
-- permAdvice: Phân biệt rõ giữa uốn hóa chất giữ nếp lâu dài và tạo kiểu tạm thời bằng máy sấy/máy uốn tại nhà (${preferences.wantsPerm ? "Khách có nhu cầu uốn" : "Khách không có nhu cầu uốn"}).
+- colorAdvice: Gợi ý màu tóc phù hợp với tone da và khuôn mặt trong ảnh (recommendation, suggestedColors, reason).
+- permAdvice: Tư vấn xem có nên uốn nhẹ tạo độ phồng hay không, phân biệt giữa uốn hóa chất salon và sấy tạo phom tại nhà (recommendation, reason).
 
-LƯU Ý PHÂN QUYỀN VÀ TRÁCH NHIỆM:
+LƯU Ý:
 - Không suy đoán danh tính, tuổi tác, giới tính, thông tin nhạy cảm. Không chấm điểm đẹp/xấu.
-- Không chẩn đoán bệnh lý tóc/da đầu. Không kết luận độ an toàn của hóa chất qua ảnh.
+- Không chẩn đoán bệnh lý tóc/da đầu.
 - Luôn có disclaimer: "${disclaimer}"
 
 Trả về ĐÚNG ĐỊNH DẠNG JSON theo cấu trúc trên.

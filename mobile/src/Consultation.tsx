@@ -1,13 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, Image, Pressable, Switch, Alert } from "react-native";
+import { View, Text, Image, Switch, Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { api } from "./api";
-import { ConsultationResult, Preferences } from "./types";
+import { ConsultationResult } from "./types";
 import {
   Button,
   Card,
   ErrorText,
-  Field,
   Loading,
   Page,
   styles,
@@ -21,17 +20,6 @@ interface ConsultationProps {
 export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
-
-  // Preferences form
-  const [hairLength, setHairLength] = useState("Trung bình");
-  const [desiredLength, setDesiredLength] = useState("Ngắn gọn hoặc tỉa layer");
-  const [hairTexture, setHairTexture] = useState("Tóc thẳng tự nhiên");
-  const [hairDensity, setHairDensity] = useState("Dày vừa phải");
-  const [preferredStyle, setPreferredStyle] = useState("Trẻ trung, hiện đại");
-  const [maintenanceLevel, setMaintenanceLevel] = useState<"low" | "medium" | "high">("medium");
-  const [wantsDye, setWantsDye] = useState(false);
-  const [wantsPerm, setWantsPerm] = useState(false);
-  const [hairCondition, setHairCondition] = useState("Khỏe, chưa qua tẩy");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -88,22 +76,10 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
     setError("");
     setResult(null);
 
-    const preferences: Preferences = {
-      hairLength,
-      desiredLength,
-      hairTexture,
-      hairDensity,
-      preferredStyle,
-      maintenanceLevel,
-      wantsDye,
-      wantsPerm,
-      hairCondition
-    };
-
     try {
       const formData = new FormData();
       formData.append("consent", "true");
-      formData.append("preferences", JSON.stringify(preferences));
+      formData.append("preferences", JSON.stringify({}));
 
       const uriParts = imageUri.split(".");
       const fileType = uriParts[uriParts.length - 1];
@@ -142,94 +118,89 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
     <Page>
       <Text style={styles.title}>AI Tư vấn kiểu tóc</Text>
       <Text style={styles.muted}>
-        Chụp ảnh khuôn mặt chính diện và điền sở thích để nhận gợi ý kiểu tóc phù hợp nhất.
+        Chỉ cần chụp hoặc tải ảnh khuôn mặt trực diện rõ nét. AI Vision sẽ tự nhìn tỷ lệ khuôn mặt và mái tóc hiện tại để gợi ý 3 kiểu tóc phù hợp nhất.
       </Text>
 
       <ErrorText message={error} />
 
-      {/* Image selector */}
-      <Card>
-        <Text style={styles.subtitle}>Ảnh khuôn mặt</Text>
+      {/* Image selector card */}
+      <Card style={{ alignItems: "center", paddingVertical: 18, gap: 14 }}>
         {imageUri ? (
-          <View style={{ alignItems: "center", gap: 10, marginVertical: 8 }}>
+          <View style={{ alignItems: "center", gap: 12, width: "100%" }}>
             <Image
               source={{ uri: imageUri }}
-              style={{ width: 180, height: 180, borderRadius: 16, backgroundColor: "#333" }}
+              style={{
+                width: 200,
+                height: 200,
+                borderRadius: 16,
+                backgroundColor: "#222",
+                borderWidth: 2,
+                borderColor: colors.gold
+              }}
             />
             <View style={{ flexDirection: "row", gap: 10 }}>
-              <Button title="Chụp lại" secondary onPress={takePhoto} />
-              <Button title="Chọn ảnh khác" secondary onPress={pickImage} />
+              <Button title="📸 Chụp lại" secondary onPress={takePhoto} />
+              <Button title="🖼️ Đổi ảnh khác" secondary onPress={pickImage} />
+            </View>
+
+            {/* Consent checkbox */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 6,
+                paddingHorizontal: 8
+              }}
+            >
+              <Switch
+                value={consent}
+                onValueChange={setConsent}
+                trackColor={{ true: colors.gold, false: "#444" }}
+              />
+              <Text style={[styles.muted, { flex: 1, fontSize: 13 }]}>
+                Đồng ý để AI phân tích dáng mặt và tóc trực tiếp từ ảnh.
+              </Text>
+            </View>
+
+            {/* Submit button */}
+            <View style={{ width: "100%", marginTop: 4 }}>
+              <Button
+                title={loading ? "🔍 Đang phân tích khuôn mặt..." : "⚡ Phân tích & Gợi ý kiểu tóc ngay"}
+                onPress={handleSubmit}
+                disabled={loading || !imageUri || !consent}
+              />
             </View>
           </View>
         ) : (
-          <View style={{ gap: 10, marginVertical: 8 }}>
-            <Button title="Chụp ảnh bằng Camera" onPress={takePhoto} />
-            <Button title="Chọn từ thư viện ảnh" secondary onPress={pickImage} />
+          <View style={{ alignItems: "center", gap: 12, width: "100%", paddingVertical: 8 }}>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                backgroundColor: "#222",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: "#333"
+              }}
+            >
+              <Text style={{ fontSize: 32 }}>📸</Text>
+            </View>
+            <Text style={[styles.subtitle, { fontSize: 16, textAlign: "center" }]}>
+              Chưa có ảnh khuôn mặt
+            </Text>
+            <Text style={[styles.muted, { textAlign: "center", fontSize: 13, maxWidth: 320 }]}>
+              Vui lòng chụp ảnh hoặc tải ảnh chân dung khuôn mặt trực diện, rõ nét, đủ ánh sáng. AI sẽ tự động nhìn phom mặt và đề xuất kiểu tóc.
+            </Text>
+
+            <View style={{ width: "100%", gap: 10, marginTop: 4 }}>
+              <Button title="📸 Chụp ảnh bằng Camera" onPress={takePhoto} />
+              <Button title="🖼️ Chọn ảnh từ thư viện" secondary onPress={pickImage} />
+            </View>
           </View>
         )}
-      </Card>
-
-      {/* Preferences Form */}
-      <Card>
-        <Text style={styles.subtitle}>Sở thích & Tình trạng tóc</Text>
-        <Field label="Độ dài tóc hiện tại" value={hairLength} onChange={setHairLength} />
-        <Field label="Độ dài mong muốn" value={desiredLength} onChange={setDesiredLength} />
-        <Field label="Chất tóc (thẳng, xoăn nhẹ, rễ tre...)" value={hairTexture} onChange={setHairTexture} />
-        <Field label="Mật độ tóc (dày, mỏng, vừa)" value={hairDensity} onChange={setHairDensity} />
-        <Field label="Phong cách ưa thích (layer, side part...)" value={preferredStyle} onChange={setPreferredStyle} />
-        <Field label="Tình trạng tóc (khỏe, đã tẩy, khô xơ...)" value={hairCondition} onChange={setHairCondition} />
-
-        {/* Maintenance Level */}
-        <View style={{ gap: 6 }}>
-          <Text style={styles.muted}>Mức độ chăm sóc tóc</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {(["low", "medium", "high"] as const).map((level) => {
-              const label = level === "low" ? "Thấp" : level === "medium" ? "Vừa" : "Cao";
-              const isSelected = maintenanceLevel === level;
-              return (
-                <Pressable
-                  key={level}
-                  onPress={() => setMaintenanceLevel(level)}
-                  style={[
-                    styles.button,
-                    !isSelected && styles.buttonSecondary,
-                    { flex: 1, paddingVertical: 10 }
-                  ]}
-                >
-                  <Text style={[styles.buttonText, !isSelected && { color: colors.text }]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Wants Dye / Perm switches */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-          <Text style={styles.text}>Muốn tư vấn nhuộm tóc?</Text>
-          <Switch value={wantsDye} onValueChange={setWantsDye} trackColor={{ true: colors.gold, false: "#444" }} />
-        </View>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={styles.text}>Muốn tư vấn uốn tóc?</Text>
-          <Switch value={wantsPerm} onValueChange={setWantsPerm} trackColor={{ true: colors.gold, false: "#444" }} />
-        </View>
-
-        {/* Consent */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 }}>
-          <Switch value={consent} onValueChange={setConsent} trackColor={{ true: colors.gold, false: "#444" }} />
-          <Text style={[styles.muted, { flex: 1, fontSize: 13 }]}>
-            Tôi đồng ý gửi ảnh khuôn mặt và thông tin để hệ thống AI phân tích và tư vấn kiểu tóc.
-          </Text>
-        </View>
-
-        <View style={{ marginTop: 8 }}>
-          <Button
-            title={loading ? "Đang phân tích..." : "Gửi ảnh & Nhận tư vấn"}
-            onPress={handleSubmit}
-            disabled={loading || !imageUri || !consent}
-          />
-        </View>
       </Card>
 
       {loading && <Loading />}

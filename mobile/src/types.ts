@@ -54,15 +54,15 @@ export interface WorkSchedule {
 }
 
 export interface Preferences {
-  hairLength: string;
-  desiredLength: string;
-  hairTexture: string;
-  hairDensity: string;
-  preferredStyle: string;
-  maintenanceLevel: "low" | "medium" | "high";
-  wantsDye: boolean;
-  wantsPerm: boolean;
-  hairCondition: string;
+  hairLength?: string;
+  desiredLength?: string;
+  hairTexture?: string;
+  hairDensity?: string;
+  preferredStyle?: string;
+  maintenanceLevel?: "low" | "medium" | "high";
+  wantsDye?: boolean;
+  wantsPerm?: boolean;
+  hairCondition?: string;
 }
 
 export interface ConsultationResult {

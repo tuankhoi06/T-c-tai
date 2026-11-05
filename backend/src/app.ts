@@ -442,15 +442,17 @@ export function createApp(repo: Repository) {
 
       ensure(req.file, 400, "Chưa có ảnh.");
 
-      let preferences: unknown;
+      let preferences: unknown = {};
 
-      try {
-        preferences = JSON.parse(req.body.preferences);
-      } catch {
-        throw new AppError(
-          400,
-          "Thông tin sở thích không hợp lệ."
-        );
+      if (req.body.preferences) {
+        try {
+          preferences =
+            typeof req.body.preferences === "string"
+              ? JSON.parse(req.body.preferences)
+              : req.body.preferences;
+        } catch {
+          preferences = {};
+        }
       }
 
       const parsed = preferencesSchema.parse(preferences);
