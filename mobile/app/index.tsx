@@ -22,7 +22,6 @@ export default function AppIndex() {
   const [portal, setPortal] = useState<"customer" | "admin">("customer");
   // Customer sub-tab: 'login' vs 'register'
   const [customerAuthMode, setCustomerAuthMode] = useState<"login" | "register">("login");
-  const [customerScreen, setCustomerScreen] = useState<"booking" | "ai">("booking");
 
   // Auth fields
   const [identifier, setIdentifier] = useState("");
@@ -387,50 +386,12 @@ export default function AppIndex() {
     return <Admin user={currentUser} onLogout={handleLogout} />;
   }
 
-  // Customer Role View
+  // Customer Role View (features 4 bottom navigation tabs: Home, AI, Appointments, Profile)
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Top Navbar for Customer */}
-      <SafeAreaView style={{ backgroundColor: "#181818", borderBottomWidth: 1, borderColor: colors.border }}>
-        <View style={{ paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <View>
-            <Text style={[styles.subtitle, { color: colors.gold, fontSize: 20 }]}>HairMatch</Text>
-            <Text style={[styles.muted, { fontSize: 12 }]}>Xin chào, {currentUser.name}</Text>
-          </View>
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            <Pressable
-              onPress={() => setCustomerScreen("booking")}
-              style={[
-                styles.button,
-                customerScreen !== "booking" && styles.buttonSecondary,
-                { paddingVertical: 6, paddingHorizontal: 12 }
-              ]}
-            >
-              <Text style={[styles.buttonText, { fontSize: 12 }, customerScreen !== "booking" && { color: colors.text }]}>
-                Đặt lịch
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setCustomerScreen("ai")}
-              style={[
-                styles.button,
-                customerScreen !== "ai" && styles.buttonSecondary,
-                { paddingVertical: 6, paddingHorizontal: 12 }
-              ]}
-            >
-              <Text style={[styles.buttonText, { fontSize: 12 }, customerScreen !== "ai" && { color: colors.text }]}>
-                AI Tư vấn
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </SafeAreaView>
-
-      {customerScreen === "booking" ? (
-        <Customer user={currentUser} onLogout={handleLogout} onUserUpdated={setCurrentUser} />
-      ) : (
-        <Consultation />
-      )}
-    </View>
+    <Customer
+      user={currentUser}
+      onLogout={handleLogout}
+      onUserUpdated={setCurrentUser}
+    />
   );
 }

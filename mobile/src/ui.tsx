@@ -112,8 +112,8 @@ export function Page({ children }: { children: ReactNode }) {
   );
 }
 
-export function Card({ children }: { children: ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+export function Card({ children, style }: { children: ReactNode; style?: any }) {
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function Button({

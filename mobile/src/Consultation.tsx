@@ -14,7 +14,11 @@ import {
   colors
 } from "./ui";
 
-export function Consultation() {
+interface ConsultationProps {
+  onBookWithHaircut?: (haircutName: string, barberNote: string) => void;
+}
+
+export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
 
@@ -277,6 +281,14 @@ export function Consultation() {
                       Lưu ý cho thợ: {rec.barberNote}
                     </Text>
                   </View>
+                  {onBookWithHaircut && (
+                    <View style={{ marginTop: 8 }}>
+                      <Button
+                        title={`✂️ Đặt lịch kiểu tóc "${rec.name}"`}
+                        onPress={() => onBookWithHaircut(rec.name, rec.barberNote)}
+                      />
+                    </View>
+                  )}
                 </Card>
               ))}
             </View>
