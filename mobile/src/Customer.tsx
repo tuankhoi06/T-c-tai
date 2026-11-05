@@ -115,11 +115,22 @@ export function Customer({ user, onLogout, onUserUpdated }: CustomerProps) {
   }
 
   // Handle transition from AI Consultation to Booking
-  function handleBookWithAiHaircut(haircutName: string, barberNote: string) {
+  function handleBookWithAiHaircut(haircutName: string, barberNote: string, suggestedService?: string) {
     setAiHaircutSuggestion({ name: haircutName, barberNote });
-    // Default to the first hair cutting service if available
-    const cutService = services.find((s) => s.id === "cut") || services[0];
-    if (cutService) setSelectedService(cutService);
+    let matchedSvc = services.find((s) =>
+      suggestedService && s.name.toLowerCase().includes(suggestedService.toLowerCase())
+    );
+    if (!matchedSvc && suggestedService) {
+      if (suggestedService.includes("Uốn") || haircutName.includes("Uốn")) {
+        matchedSvc = services.find((s) => s.id === "perm" || s.name.includes("Uốn"));
+      } else if (suggestedService.includes("Nhuộm") || haircutName.includes("Nhuộm")) {
+        matchedSvc = services.find((s) => s.id === "dye" || s.name.includes("Nhuộm"));
+      }
+    }
+    if (!matchedSvc) {
+      matchedSvc = services.find((s) => s.id === "cut") || services[0];
+    }
+    if (matchedSvc) setSelectedService(matchedSvc);
     setAppointmentView("book");
     setNavTab("appointments");
   }

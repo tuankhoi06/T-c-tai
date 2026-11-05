@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 import { MemoryRepository } from "../repository.js";
 import { BookingService } from "../booking.js";
-import { ConsultationService, preferencesSchema } from "../ai.js";
+import { ConsultationService, MockProvider, preferencesSchema } from "../ai.js";
 import { SHOP_ZONE } from "../config.js";
 
 describe("Phân quyền & Bảo mật (Authorization & Security)", () => {
@@ -87,7 +87,7 @@ describe("Xử lý AI & Kiểm tra tính hợp lệ (AI & Input Validation)", ()
   });
 
   it("Mock AI trả về đầy đủ 3 gợi ý kiểu tóc và disclaimer an toàn", async () => {
-    const consultation = new ConsultationService();
+    const consultation = new ConsultationService(new MockProvider());
     // 1x1 png buffer for sharp processing
     const validPng = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",

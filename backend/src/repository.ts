@@ -125,6 +125,11 @@ export class MemoryRepository implements Repository {
     this.users.put(admin);
     this.users.put(customer);
 
+    this.sessions.put("demo-customer-token", {
+      userId: customer.id,
+      expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000
+    });
+
     const services: HairService[] = [
       {
         id: "cut",

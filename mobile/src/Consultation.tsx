@@ -15,7 +15,7 @@ import {
 } from "./ui";
 
 interface ConsultationProps {
-  onBookWithHaircut?: (haircutName: string, barberNote: string) => void;
+  onBookWithHaircut?: (haircutName: string, barberNote: string, suggestedService?: string) => void;
 }
 
 export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
@@ -279,12 +279,34 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
               <Text style={styles.subtitle}>Gợi ý 3 kiểu tóc phù hợp</Text>
               {result.haircutRecommendations.map((rec, idx) => (
                 <Card key={idx}>
-                  <Text style={[styles.subtitle, { color: colors.gold }]}>
-                    {idx + 1}. {rec.name}
-                  </Text>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={[styles.subtitle, { color: colors.gold, flex: 1 }]}>
+                      {idx + 1}. {rec.name}
+                    </Text>
+                    {rec.direction && (
+                      <View style={{ backgroundColor: "#262626", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ color: colors.gold, fontSize: 11, fontWeight: "600" }}>{rec.direction}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.text}>{rec.reason}</Text>
                   <Text style={styles.muted}>Độ dài: {rec.length}</Text>
-                  <Text style={styles.muted}>Chăm sóc: {rec.maintenance}</Text>
+                  <Text style={styles.muted}>Mức chăm sóc: {rec.maintenance}</Text>
+                  {rec.feasibility && (
+                    <Text style={[styles.text, { color: rec.feasibility.includes("Cần nuôi") ? "#fbbf24" : "#4ade80", fontSize: 13 }]}>
+                      📌 {rec.feasibility}
+                    </Text>
+                  )}
+                  {rec.stylingMethod && (
+                    <Text style={[styles.muted, { fontSize: 13 }]}>
+                      🧴 Cách tạo kiểu: {rec.stylingMethod}
+                    </Text>
+                  )}
+                  {rec.suggestedService && (
+                    <Text style={[styles.text, { fontSize: 13, color: colors.gold }]}>
+                      💈 Dịch vụ tiệm: {rec.suggestedService}
+                    </Text>
+                  )}
                   <View style={{ backgroundColor: "#262626", padding: 10, borderRadius: 8, marginTop: 4 }}>
                     <Text style={[styles.muted, { fontSize: 13, color: colors.gold }]}>
                       Lưu ý cho thợ: {rec.barberNote}
@@ -294,7 +316,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                     <View style={{ marginTop: 8 }}>
                       <Button
                         title={`✂️ Đặt lịch kiểu tóc "${rec.name}"`}
-                        onPress={() => onBookWithHaircut(rec.name, rec.barberNote)}
+                        onPress={() => onBookWithHaircut(rec.name, rec.barberNote, rec.suggestedService)}
                       />
                     </View>
                   )}

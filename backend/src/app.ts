@@ -80,7 +80,11 @@ export function createApp(repo: Repository) {
   const consultation = new ConsultationService();
 
   app.disable("x-powered-by");
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" }
+    })
+  );
 
   const origins = config.CORS_ORIGINS
     .split(",")
@@ -89,7 +93,10 @@ export function createApp(repo: Repository) {
 
   app.use(
     cors({
-      origin: origins.length ? origins : true
+      origin: origins.length ? origins : true,
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "Accept"]
     })
   );
 

@@ -75,8 +75,12 @@ export interface ConsultationResult {
   observations: string[];
   haircutRecommendations: {
     name: string;
+    direction?: string;
     reason: string;
     length: string;
+    feasibility?: string;
+    stylingMethod?: string;
+    suggestedService?: string;
     maintenance: string;
     barberNote: string;
   }[];

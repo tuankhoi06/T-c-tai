@@ -78,8 +78,12 @@ export interface Preferences {
 
 export interface HaircutRecommendation {
   name: string;
+  direction?: string;
   reason: string;
   length: string;
+  feasibility?: string;
+  stylingMethod?: string;
+  suggestedService?: string;
   maintenance: string;
   barberNote: string;
 }
