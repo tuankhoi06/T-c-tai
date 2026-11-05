@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HairMatch - Ứng Dụng Đặt Lịch & AI Tư Vấn Kiểu Tóc</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --gold: #e9bb55;
+      --gold-hover: #d4a53c;
+      --dark-bg: #111111;
+      --card-bg: #1a1a1a;
+      --border-color: #2e2e2e;
+    }
+    body {
+      background-color: var(--dark-bg);
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .gold-text { color: var(--gold); }
+    .gold-bg { background-color: var(--gold); }
+    .gold-border { border-color: var(--gold); }
+    .card { background-color: var(--card-bg); border: 1px solid var(--border-color); }
+    .btn-gold {
+      background-color: var(--gold);
+      color: #111;
+      font-weight: 700;
+      transition: all 0.2s;
+    }
+    .btn-gold:hover { background-color: var(--gold-hover); }
+    .btn-secondary {
+      background-color: #262626;
+      color: #f3f4f6;
+      border: 1px solid var(--border-color);
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover { background-color: #333333; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #141414; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen text-neutral-200">
+
+  <div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Top App Header -->
+    <header class="card rounded-2xl p-4 flex items-center justify-between shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl gold-bg flex items-center justify-center text-black font-extrabold text-xl shadow-lg">
+          ✂️
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-black tracking-tight gold-text">HairMatch</h1>
+          <p id="header-user-status" class="text-xs text-neutral-400">Vui lòng đăng nhập để sử dụng</p>
+        </div>
+      </div>
+
+      <!-- User Action (Logout when logged in) -->
+      <div id="header-auth-actions" class="flex items-center gap-2">
+        <button id="btn-logout" onclick="handleLogout()" class="px-3.5 py-1.5 text-xs font-bold rounded-xl btn-secondary text-neutral-300 hover:text-white transition hidden">
+          🚪 Đăng xuất
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- 1. AUTH SCREEN (KHÁCH HÀNG / ADMIN SEPARATED) -->
+    <!-- ========================================== -->
+    <section id="view-auth" class="space-y-6">
+      <div class="card rounded-2xl p-6 max-w-lg mx-auto space-y-5 shadow-2xl border-neutral-800">
+        <!-- Portal Selector: Khách hàng vs Chủ tiệm (Admin) -->
+        <div>
+          <p class="text-xs text-neutral-400 mb-2 font-medium">Chọn cổng đăng nhập:</p>
+          <div class="grid grid-cols-2 gap-2 p-1 bg-neutral-900 rounded-xl border border-neutral-800">
+            <button id="tab-portal-customer" onclick="selectPortal('customer')" class="py-2 text-xs font-bold rounded-lg btn-gold transition">
+              👤 Khách hàng
+            </button>
+            <button id="tab-portal-admin" onclick="selectPortal('admin')" class="py-2 text-xs font-bold rounded-lg btn-secondary transition">
+              👑 Chủ tiệm (Admin)
+            </button>
+          </div>
+        </div>
+
+        <!-- PORTAL 1: KHÁCH HÀNG -->
+        <div id="portal-customer-content" class="space-y-4">
+          <!-- Sub-mode: Đăng nhập vs Đăng ký -->
+          <div class="flex border-b border-neutral-800 pb-2 gap-4 text-xs font-bold">
+            <button id="subtab-cust-login" onclick="setCustomerAuthMode('login')" class="pb-1 gold-text border-b-2 border-amber-400">
+              Đăng nhập Khách hàng
+            </button>
+            <button id="subtab-cust-register" onclick="setCustomerAuthMode('register')" class="pb-1 text-neutral-400 hover:text-white">
+              Đăng ký tài khoản mới
+            </button>
+          </div>
+
+          <!-- Customer Login Form -->
+          <div id="form-cust-login" class="space-y-3 text-xs">
+            <div>
+              <label class="text-neutral-400 block mb-1">Số điện thoại hoặc Email</label>
+              <input id="login-cust-id" type="text" value="0911111111" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Mật khẩu</label>
+              <input id="login-cust-pass" type="password" value="Customer123!" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div class="flex justify-end pt-0.5">
+              <button onclick="triggerForgotPasswordDemo('Khách hàng')" class="text-[11px] gold-text hover:underline">
+                Quên mật khẩu? (Demo)
+              </button>
+            </div>
+            <button onclick="loginAs('customer', 'Khách hàng demo')" class="w-full py-2.5 rounded-xl btn-gold text-xs font-bold shadow-md">
+              Đăng nhập
+            </button>
+          </div>
+
+          <!-- Customer Register Form -->
+          <div id="form-cust-register" class="space-y-3 text-xs hidden">
+            <div>
+              <label class="text-neutral-400 block mb-1">Họ và tên của bạn</label>
+              <input id="reg-cust-name" type="text" placeholder="Ví dụ: Nguyễn Văn An" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Số điện thoại</label>
+              <input id="reg-cust-phone" type="text" placeholder="09xxxxxxxx" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Email (dùng nhận thông báo & quên mật khẩu)</label>
+              <input id="reg-cust-email" type="email" placeholder="example@gmail.com" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Mật khẩu (tối thiểu 8 ký tự)</label>
+              <input id="reg-cust-pass" type="password" placeholder="••••••••" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <button onclick="handleRegisterCustomer()" class="w-full py-2.5 rounded-xl btn-gold text-xs font-bold shadow-md">
+              Tạo tài khoản ngay
+            </button>
+          </div>
+        </div>
+
+        <!-- PORTAL 2: ADMIN (CHỦ TIỆM) -->
+        <div id="portal-admin-content" class="space-y-4 hidden">
+          <div class="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-xs text-amber-300">
+            👑 Khu vực dành riêng cho chủ salon và quản lý ca làm việc, duyệt lịch hẹn.
+          </div>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="text-neutral-400 block mb-1">Số điện thoại hoặc Email quản trị</label>
+              <input id="login-admin-id" type="text" value="0900000000" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Mật khẩu quản trị</label>
+              <input id="login-admin-pass" type="password" value="Admin123!" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div class="flex justify-end pt-0.5">
+              <button onclick="triggerForgotPasswordDemo('Admin')" class="text-[11px] gold-text hover:underline">
+                Quên mật khẩu quản trị? (Demo)
+              </button>
+            </div>
+            <button onclick="loginAs('admin', 'Chủ tiệm HairMatch')" class="w-full py-2.5 rounded-xl btn-gold text-xs font-bold shadow-md">
+              Đăng nhập Quản trị
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 2. CUSTOMER VIEW (4 TABS CHUẨN ĐẶC TẢ) -->
+    <!-- ========================================== -->
+    <main id="view-customer" class="space-y-6 hidden">
+      <!-- 4 Bottom/Top Customer Nav Tabs -->
+      <div class="grid grid-cols-4 gap-2 border-b border-neutral-800 pb-3">
+        <button id="cust-tab-home" onclick="switchCustomerTab('home')" class="py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-gold flex flex-col md:flex-row items-center justify-center gap-1">
+          <span>🏠</span> <span>Trang chủ</span>
+        </button>
+        <button id="cust-tab-ai" onclick="switchCustomerTab('ai')" class="py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-secondary flex flex-col md:flex-row items-center justify-center gap-1">
+          <span>✨</span> <span>AI Tư vấn</span>
+        </button>
+        <button id="cust-tab-book" onclick="switchCustomerTab('book')" class="py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-secondary flex flex-col md:flex-row items-center justify-center gap-1 relative">
+          <span>📅</span> <span>Lịch hẹn</span>
+          <span id="badge-appt-count" class="bg-amber-400 text-black px-1.5 py-0.2 rounded-full text-[10px] font-bold">0</span>
+        </button>
+        <button id="cust-tab-profile" onclick="switchCustomerTab('profile')" class="py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-secondary flex flex-col md:flex-row items-center justify-center gap-1">
+          <span>👤</span> <span>Hồ sơ</span>
+        </button>
+      </div>
+
+      <!-- ================= TAB 1: TRANG CHỦ ================= -->
+      <section id="cust-page-home" class="space-y-6">
+        <!-- Hero Salon Banner -->
+        <div class="card rounded-2xl p-6 bg-gradient-to-r from-[#1f1a10] to-[#161616] border-amber-500/40 space-y-3">
+          <span class="text-xs gold-text uppercase font-bold tracking-wider">Barbershop Đẳng Cấp</span>
+          <h2 class="text-2xl font-black text-white">Nâng Tầm Phong Độ & Diện Mạo Phái Mạnh</h2>
+          <p class="text-xs text-neutral-300 max-w-xl">
+            Trải nghiệm dịch vụ cắt tóc tạo kiểu kết hợp công nghệ AI tư vấn khuôn mặt thông minh. Đặt lịch trước chỉ trong 30 giây, không lo chờ đợi.
+          </p>
+          <div class="flex flex-wrap gap-3 pt-2">
+            <button onclick="switchCustomerTab('book')" class="px-5 py-2.5 rounded-xl btn-gold text-xs font-bold shadow-lg">
+              ✂️ Đặt lịch cắt tóc ngay
+            </button>
+            <button onclick="switchCustomerTab('ai')" class="px-5 py-2.5 rounded-xl btn-secondary text-xs font-bold">
+              ✨ Trải nghiệm AI tư vấn
+            </button>
+          </div>
+        </div>
+
+        <!-- Featured Services -->
+        <div class="space-y-3">
+          <div class="flex justify-between items-center">
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Bảng giá dịch vụ salon</h3>
+            <button onclick="switchCustomerTab('book')" class="text-xs gold-text hover:underline">Xem tất cả & đặt →</button>
+          </div>
+          <div id="home-service-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        </div>
+
+        <!-- Barbers Team -->
+        <div class="space-y-3">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider">Đội ngũ thợ tóc hàng đầu</h3>
+          <div id="home-barber-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        </div>
+
+        <!-- Salon Info -->
+        <div class="card rounded-2xl p-4 text-xs space-y-1.5 text-neutral-400">
+          <p class="font-bold text-white text-sm gold-text">📍 Tiệm tóc HairMatch Barbershop</p>
+          <p>• Địa chỉ: 123 Đường Cắt Tóc, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh</p>
+          <p>• Giờ mở cửa: 09:00 - 19:00 (Tất cả các ngày trong tuần)</p>
+          <p>• Hotline hỗ trợ: 1900 6868</p>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: AI TƯ VẤN KIỂU TÓC ================= -->
+      <section id="cust-page-ai" class="space-y-6 hidden">
+        <div class="card rounded-2xl p-5 space-y-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-6 h-6 rounded-full gold-bg text-black text-xs flex items-center justify-center font-bold">✨</span>
+              AI Phân tích khuôn mặt & Gợi ý kiểu tóc
+            </h2>
+            <p class="text-xs text-neutral-400 mt-1">
+              Hệ thống bắt buộc phải có ảnh khuôn mặt người trực diện, rõ nét để nhận diện trước khi đưa ra gợi ý kiểu tóc.
+            </p>
+          </div>
+
+          <!-- Centered AI Photo Consultation Card -->
+          <div class="card bg-[#141414] rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center space-y-4 border border-neutral-800 max-w-xl mx-auto shadow-2xl">
+            <!-- Photo placeholder when no photo selected -->
+            <div id="photo-placeholder" class="space-y-3 py-6 px-4 w-full border-2 border-dashed border-neutral-700/80 rounded-2xl bg-neutral-900/40 hover:border-amber-400/50 transition cursor-pointer" onclick="document.getElementById('ai-file-input').click()">
+              <div class="w-20 h-20 rounded-full bg-neutral-800 flex items-center justify-center text-3xl mx-auto shadow-md text-amber-400">
+                📸
+              </div>
+              <div>
+                <p class="text-sm font-bold text-white">Chưa chọn ảnh khuôn mặt</p>
+                <p class="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+                  Nhấn vào đây hoặc bấm "Tải ảnh từ máy" để chọn ảnh chân dung khuôn mặt trực diện, rõ nét.
+                </p>
+              </div>
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[11px] font-medium">
+                <span>✨</span> AI Vision sẽ tự nhìn dáng mặt và mái tóc hiện tại để gợi ý 3 kiểu tóc phù hợp nhất
+              </div>
+            </div>
+
+            <!-- Preview Image when photo selected -->
+            <div id="photo-preview-wrap" class="hidden flex flex-col items-center gap-3 w-full py-2">
+              <div class="relative">
+                <img id="photo-preview" src="" alt="Face preview" class="w-48 h-48 object-cover rounded-2xl border-2 border-amber-400 shadow-xl shadow-amber-400/10" />
+                <span class="absolute -top-2 -right-2 bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+                  ✓ ĐÃ NẠP ẢNH
+                </span>
+              </div>
+              <span id="photo-status-badge" class="text-xs font-semibold px-3 py-1 rounded-full bg-neutral-800 text-neutral-200 max-w-[240px] truncate block text-center border border-neutral-700">
+                Ảnh đã nạp
+              </span>
+            </div>
+
+            <!-- Hidden native file input -->
+            <input type="file" id="ai-file-input" accept="image/*" class="hidden" onchange="handleUserPhotoUpload(event)" />
+
+            <!-- Action buttons -->
+            <div class="flex flex-col sm:flex-row gap-3 w-full justify-center pt-2">
+              <button onclick="document.getElementById('ai-file-input').click()" class="py-2.5 px-4 text-xs font-bold rounded-xl btn-secondary text-amber-300 flex items-center justify-center gap-2 hover:bg-neutral-800 transition">
+                <span>📁 Tải ảnh từ máy</span>
+              </button>
+              <button id="btn-run-ai" onclick="runAiConsultation()" class="py-2.5 px-6 rounded-xl btn-gold text-xs font-bold flex items-center justify-center gap-2 shadow-lg hover:shadow-amber-400/20 transition">
+                <span>⚡ Phân tích & Gợi ý kiểu tóc ngay</span>
+              </button>
+            </div>
+
+            <p class="text-[11px] text-neutral-500 pt-1">
+              🔒 <strong>Bảo mật:</strong> Ảnh chỉ gửi trực tiếp tới AI phân tích dáng mặt tức thời, salon không lưu trữ ảnh chân dung của bạn.
+            </p>
+          </div>
+        </div>
+
+        <!-- AI Validation Error Alert Box (when no photo or no face detected) -->
+        <div id="ai-error-box" class="card rounded-2xl p-4 bg-red-950/40 border-red-700/60 text-red-200 text-xs hidden flex items-start gap-3 shadow-lg">
+          <span class="text-2xl">❌</span>
+          <div class="space-y-1">
+            <h4 class="font-bold text-sm text-red-300" id="ai-error-title">Lỗi phân tích hình ảnh</h4>
+            <p id="ai-error-msg" class="text-neutral-300 leading-relaxed"></p>
+          </div>
+        </div>
+
+        <!-- AI Results Display Panel (Shown ONLY when face is successfully recognized) -->
+        <div id="ai-result-panel" class="space-y-4 hidden">
+          <!-- Assessment Banner -->
+          <div class="card rounded-2xl p-4 bg-gradient-to-r from-neutral-900 to-[#1e1c14] border-emerald-500/40">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-400 border border-emerald-700/50 flex items-center gap-1.5">
+                <span>🔍</span> Ảnh chụp phù hợp để tư vấn sơ bộ
+              </span>
+              <span class="text-xs text-neutral-400">Ước lượng dáng mặt từ ảnh 2D: <strong class="gold-text" id="res-face">...</strong></span>
+            </div>
+            <div id="res-obs" class="text-xs text-neutral-300 mt-2 space-y-1"></div>
+          </div>
+
+          <!-- 3 Recommendations Cards representing 3 distinct directions -->
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-neutral-300">Đề xuất 3 phương án kiểu tóc:</h3>
+            <span class="text-[11px] text-amber-300">Được tối ưu theo độ dài và phom mặt</span>
+          </div>
+          <div id="res-haircuts" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+
+          <!-- Color & Perm Advice -->
+          <div class="card rounded-2xl p-4 space-y-3">
+            <h4 class="text-xs font-bold gold-text uppercase tracking-wider">Tư vấn màu sắc & Uốn tóc</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div class="bg-neutral-900/80 p-3 rounded-xl border border-neutral-800">
+                <span class="font-bold text-amber-300">🎨 Nhuộm tóc:</span>
+                <p id="res-dye" class="mt-1 text-neutral-300"></p>
+              </div>
+              <div class="bg-neutral-900/80 p-3 rounded-xl border border-neutral-800">
+                <span class="font-bold text-amber-300">🌀 Uốn tóc:</span>
+                <p id="res-perm" class="mt-1 text-neutral-300"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mandatory Safety Disclaimer Card -->
+          <div class="card rounded-xl p-3.5 bg-amber-950/20 border-amber-600/40 text-amber-300 text-xs text-center font-medium">
+            ⚠️ Gợi ý AI mang tính tham khảo. Thợ tóc sẽ tư vấn thêm trước khi thực hiện.
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: LỊCH HẸN & ĐẶT LỊCH ================= -->
+      <section id="cust-page-book" class="space-y-6 hidden">
+        <!-- Sub-switcher: Đặt lịch mới vs Lịch của tôi -->
+        <div class="flex gap-2 p-1 bg-neutral-900 rounded-xl border border-neutral-800 max-w-sm">
+          <button id="book-subtab-new" onclick="switchBookingSubtab('new')" class="flex-1 py-1.5 text-xs font-bold rounded-lg btn-gold transition">
+            ✂️ Đặt lịch mới
+          </button>
+          <button id="book-subtab-my" onclick="switchBookingSubtab('my')" class="flex-1 py-1.5 text-xs font-bold rounded-lg btn-secondary transition">
+            📋 Lịch của tôi (<span id="book-subtab-count">0</span>)
+          </button>
+        </div>
+
+        <!-- --- CHẾ ĐỘ 1: ĐẶT LỊCH MỚI --- -->
+        <div id="booking-flow-container" class="space-y-5">
+          <!-- AI Haircut Banner (when selected from AI) -->
+          <div id="ai-haircut-banner" class="card rounded-2xl p-4 bg-gradient-to-r from-neutral-900 to-[#221c10] border-amber-500/40 hidden">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold gold-text flex items-center gap-1.5">
+                ✨ Kiểu tóc đã chọn từ AI
+              </span>
+              <button onclick="document.getElementById('ai-haircut-banner').classList.add('hidden'); state.selectedHaircut = null;" class="text-xs text-neutral-400 hover:text-white">✕ Bỏ chọn</button>
+            </div>
+            <h4 id="ai-haircut-name" class="font-bold text-sm text-white mt-1">-</h4>
+            <p id="ai-haircut-note" class="text-xs text-neutral-300 mt-0.5">-</p>
+          </div>
+
+          <!-- Step 1: Services -->
+          <div class="card rounded-2xl p-5 space-y-3">
+            <div class="flex justify-between items-center">
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full gold-bg text-black text-xs flex items-center justify-center font-bold">1</span>
+                Chọn dịch vụ tóc
+              </h2>
+              <span class="text-xs text-neutral-400" id="selected-svc-hint">Chưa chọn</span>
+            </div>
+            <div id="service-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+          </div>
+
+          <!-- Step 2: Barbers -->
+          <div class="card rounded-2xl p-5 space-y-3">
+            <div class="flex justify-between items-center">
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full gold-bg text-black text-xs flex items-center justify-center font-bold">2</span>
+                Chọn thợ làm tóc
+              </h2>
+              <span class="text-xs text-neutral-400" id="selected-barber-hint">Chưa chọn</span>
+            </div>
+            <div id="barber-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+          </div>
+
+          <!-- Step 3: Date & Slots -->
+          <div class="card rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full gold-bg text-black text-xs flex items-center justify-center font-bold">3</span>
+                Chọn ngày & khung giờ trống
+              </h2>
+              <span class="text-xs text-neutral-400">Chống trùng lịch tự động</span>
+            </div>
+
+            <!-- Date tabs -->
+            <div id="date-tabs" class="flex gap-2 overflow-x-auto pb-1"></div>
+
+            <!-- Available time slots -->
+            <div class="pt-2">
+              <p class="text-xs text-neutral-400 mb-2.5">Các khung giờ khả dụng cho ca làm:</p>
+              <div id="slot-list" class="flex flex-wrap gap-2"></div>
+            </div>
+          </div>
+
+          <!-- Booking summary & confirm button -->
+          <div id="booking-confirm-card" class="card rounded-2xl p-5 space-y-4 border-amber-500/40 bg-gradient-to-b from-[#222] to-[#181818] hidden">
+            <h3 class="text-lg font-bold gold-text">Xác nhận lịch hẹn của bạn</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div>
+                <p class="text-xs text-neutral-400">Dịch vụ</p>
+                <p id="summary-svc" class="font-bold text-white">-</p>
+              </div>
+              <div>
+                <p class="text-xs text-neutral-400">Thợ phục vụ</p>
+                <p id="summary-barber" class="font-bold text-white">-</p>
+              </div>
+              <div>
+                <p class="text-xs text-neutral-400">Thời gian</p>
+                <p id="summary-time" class="font-bold gold-text">-</p>
+              </div>
+              <div>
+                <p class="text-xs text-neutral-400">Chi phí</p>
+                <p id="summary-price" class="font-bold text-emerald-400">-</p>
+              </div>
+            </div>
+            <button onclick="handleConfirmBooking()" class="w-full py-3 rounded-xl btn-gold font-bold text-sm shadow-xl">
+              Xác nhận & Gửi yêu cầu đặt lịch
+            </button>
+          </div>
+        </div>
+
+        <!-- --- CHẾ ĐỘ 2: LỊCH HẸN CỦA TÔI --- -->
+        <div id="my-appointments-container" class="space-y-4 hidden">
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-base font-bold text-white">Lịch sử đặt hẹn của bạn</h2>
+              <p class="text-[11px] text-neutral-400 mt-0.5">
+                Quy định: Có thể hủy trong vòng 1 ngày khi còn chờ duyệt. Khi Admin đã duyệt hoặc quá 1 ngày sẽ không thể tự hủy.
+              </p>
+            </div>
+          </div>
+          <!-- Filter buttons -->
+          <div class="flex gap-2 overflow-x-auto pb-1 text-xs">
+            <button onclick="filterCustomerAppts('all')" class="px-3 py-1.5 rounded-lg btn-gold font-bold">Tất cả</button>
+            <button onclick="filterCustomerAppts('pending')" class="px-3 py-1.5 rounded-lg btn-secondary">Chờ duyệt</button>
+            <button onclick="filterCustomerAppts('confirmed')" class="px-3 py-1.5 rounded-lg btn-secondary">Đã duyệt</button>
+            <button onclick="filterCustomerAppts('completed')" class="px-3 py-1.5 rounded-lg btn-secondary">Hoàn thành</button>
+            <button onclick="filterCustomerAppts('cancelled')" class="px-3 py-1.5 rounded-lg btn-secondary">Đã hủy</button>
+          </div>
+          <div id="customer-appt-list" class="space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: HỒ SƠ CÁ NHÂN ================= -->
+      <section id="cust-page-profile" class="space-y-6 hidden">
+        <div class="card rounded-2xl p-6 space-y-4 max-w-lg mx-auto">
+          <h2 class="text-base font-bold gold-text">Thông tin tài khoản khách hàng</h2>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="text-neutral-400 block mb-1">Họ và tên</label>
+              <input id="prof-cust-name" type="text" value="Khách hàng demo" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Số điện thoại</label>
+              <p id="prof-cust-phone" class="font-bold text-white py-1">0911111111</p>
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Email</label>
+              <p id="prof-cust-email" class="font-bold text-white py-1">customer@hairmatch.vn</p>
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Vai trò</label>
+              <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">Khách hàng thân thiết</span>
+            </div>
+            <button onclick="handleUpdateProfile()" class="w-full py-2.5 rounded-xl btn-gold text-xs font-bold mt-2 shadow-md">
+              Cập nhật họ tên
+            </button>
+          </div>
+
+          <div class="border-t border-neutral-800 pt-3 space-y-2 text-xs text-neutral-400">
+            <p class="font-bold text-white">Chính sách đặt & hủy lịch:</p>
+            <p>• Quý khách có thể hủy lịch trong vòng 1 ngày (24h) kể từ khi đặt nếu lịch còn ở trạng thái Chờ duyệt.</p>
+            <p>• Sau 1 ngày hoặc khi lịch đã được Admin xác nhận duyệt, hệ thống sẽ khoá nút hủy để đảm bảo lịch làm việc cho thợ. Vui lòng gọi hotline 1900 6868 nếu cần hỗ trợ đổi ca.</p>
+          </div>
+
+          <button onclick="handleLogout()" class="w-full py-2.5 rounded-xl btn-secondary text-xs font-bold text-red-400 hover:text-red-300">
+            🚪 Đăng xuất tài khoản
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- 3. ADMIN VIEW (CHỦ TIỆM / QUẢN TRỊ VIÊN) -->
+    <!-- ========================================== -->
+    <main id="view-admin" class="space-y-6 hidden">
+      <!-- Admin Nav Tabs -->
+      <div class="flex gap-2 border-b border-neutral-800 pb-3">
+        <button id="admin-tab-stats" onclick="switchAdminTab('stats')" class="px-4 py-2 rounded-xl text-sm font-bold btn-gold">
+          📊 Thống kê salon
+        </button>
+        <button id="admin-tab-appts" onclick="switchAdminTab('appts')" class="px-4 py-2 rounded-xl text-sm font-bold btn-secondary flex items-center gap-2">
+          <span>📋 Duyệt lịch hẹn</span>
+          <span id="badge-admin-pending" class="bg-amber-500 text-black px-2 py-0.5 rounded-full text-xs font-bold">0</span>
+        </button>
+        <button id="admin-tab-manage" onclick="switchAdminTab('manage')" class="px-4 py-2 rounded-xl text-sm font-bold btn-secondary">
+          ⚙️ Dịch vụ & Thợ & Ca làm
+        </button>
+      </div>
+
+      <!-- ADMIN TAB 1: STATS -->
+      <section id="admin-page-stats" class="space-y-5">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="card rounded-2xl p-4">
+            <p class="text-xs text-neutral-400">Doanh thu thực tế</p>
+            <p id="stat-revenue" class="text-2xl font-black text-emerald-400 mt-1">0 đ</p>
+            <span class="text-[11px] text-neutral-500">Từ lịch đã hoàn thành</span>
+          </div>
+          <div class="card rounded-2xl p-4">
+            <p class="text-xs text-neutral-400">Tổng lịch hẹn</p>
+            <p id="stat-total" class="text-2xl font-black text-white mt-1">0</p>
+            <span class="text-[11px] text-neutral-500">Tất cả trạng thái</span>
+          </div>
+          <div class="card rounded-2xl p-4">
+            <p class="text-xs text-neutral-400">Chờ xác nhận</p>
+            <p id="stat-pending" class="text-2xl font-black gold-text mt-1">0</p>
+            <span class="text-[11px] text-amber-500/80">Cần chủ tiệm duyệt</span>
+          </div>
+          <div class="card rounded-2xl p-4">
+            <p class="text-xs text-neutral-400">Đã hoàn thành</p>
+            <p id="stat-completed" class="text-2xl font-black text-blue-400 mt-1">0</p>
+            <span class="text-[11px] text-neutral-500">Đã phục vụ xong</span>
+          </div>
+        </div>
+
+        <div class="card rounded-2xl p-5 space-y-3">
+          <h3 class="text-sm font-bold text-white">Hoạt động salon gần đây</h3>
+          <p class="text-xs text-neutral-400">
+            Hệ thống hỗ trợ cơ chế Mutex In-memory chống đụng lịch hẹn khi nhiều khách bấm đặt cùng 1 khung giờ.
+          </p>
+        </div>
+      </section>
+
+      <!-- ADMIN TAB 2: APPOINTMENTS MANAGEMENT -->
+      <section id="admin-page-appts" class="space-y-4 hidden">
+        <div class="flex justify-between items-center">
+          <h2 class="text-base font-bold text-white">Quản lý duyệt và cập nhật lịch hẹn</h2>
+          <span class="text-xs text-neutral-400">Thao tác 1-chạm</span>
+        </div>
+        <div id="admin-appt-list" class="space-y-3"></div>
+      </section>
+
+      <!-- ADMIN TAB 3: SERVICES & BARBERS -->
+      <section id="admin-page-manage" class="space-y-6 hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- Services List -->
+          <div class="card rounded-2xl p-5 space-y-3">
+            <h3 class="text-sm font-bold gold-text">Danh mục Dịch vụ</h3>
+            <div id="admin-service-list" class="space-y-2"></div>
+          </div>
+
+          <!-- Barbers List -->
+          <div class="card rounded-2xl p-5 space-y-3">
+            <h3 class="text-sm font-bold gold-text">Đội ngũ Thợ tóc</h3>
+            <div id="admin-barber-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Custom In-App Modal for Cancelling Appointment (Hoạt động 100% không phụ thuộc confirm của trình duyệt) -->
+    <div id="modal-cancel-appt" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+      <div class="card rounded-2xl p-5 max-w-sm w-full space-y-4 border-neutral-700 shadow-2xl">
+        <div class="flex items-center gap-3 text-amber-400">
+          <span class="text-2xl">⚠️</span>
+          <h3 class="font-bold text-base text-white">Xác nhận hủy lịch hẹn</h3>
+        </div>
+        <p id="modal-cancel-text" class="text-xs text-neutral-300 leading-relaxed">
+          Bạn có chắc chắn muốn hủy lịch hẹn này? Thao tác này sẽ giải phóng khung giờ làm việc cho salon.
+        </p>
+        <div class="flex gap-2 pt-2">
+          <button onclick="closeCancelApptModal()" class="flex-1 py-2.5 rounded-xl btn-secondary text-xs font-bold hover:bg-neutral-800">
+            Giữ lại lịch
+          </button>
+          <button onclick="executeCancelAppointment()" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-lg transition">
+            Hủy lịch ngay
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 max-w-sm bg-neutral-900 border border-amber-500/50 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transition-all duration-300 opacity-0 pointer-events-none translate-y-3 z-50">
+      <span id="toast-icon" class="text-lg">✅</span>
+      <p id="toast-msg" class="text-xs font-medium"></p>
+    </div>
+
+  </div>
+
+  <!-- Interactive JavaScript Logic -->
+  <script>
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+    // In-memory Database Simulation
+    const state = {
+      currentUser: null,
+      authPortal: 'customer',
+      customerTab: 'home',
+      adminTab: 'stats',
+      bookingSubtab: 'new',
+      currentFilter: 'all',
+
+      // AI Image & Face Recognition State
+      currentPhoto: null, // null | { url: string, type: 'valid_face' | 'no_face', label: string }
+
+      // Cancellation target ID
+      pendingCancelId: null,
+
+      selectedServiceId: 'svc-1',
+      selectedBarberId: 'barber-1',
+      selectedDateOffset: 0,
+      selectedSlot: null,
+      selectedHaircut: null,
+
+      services: [
+        { id: 'svc-1', name: 'Cắt tóc tạo kiểu cao cấp', price: 100000, duration: 30, desc: 'Tư vấn phom đầu, cắt sấy tỉa layer và cạo viền sắc nét.' },
+        { id: 'svc-2', name: 'Gội đầu dưỡng sinh & Chăm sóc', price: 80000, duration: 30, desc: 'Gội đầu thảo mộc, massage cổ vai gáy thư giãn.' },
+        { id: 'svc-3', name: 'Uốn tóc Texture & Phồng chân', price: 450000, duration: 90, desc: 'Uốn phồng tự nhiên, giữ nếp lâu, không khô ráp.' },
+        { id: 'svc-4', name: 'Nhuộm màu thời trang (Cold/Warm)', price: 500000, duration: 120, desc: 'Tư vấn tone màu tôn sáng da, lên màu chuẩn salon.' }
+      ],
+
+      barbers: [
+        { id: 'barber-1', name: 'Barber Minh', bio: 'Chuyên gia fade kỹ thuật cao, tạo kiểu Modern Classic & Side Part.', active: true },
+        { id: 'barber-2', name: 'Barber An', bio: 'Nghệ nhân layer texture Hàn Quốc, uốn phồng và phối màu nhuộm.', active: true }
+      ],
+
+      appointments: [
+        {
+          id: 'appt-1',
+          customerName: 'Khách hàng demo',
+          serviceName: 'Cắt tóc tạo kiểu cao cấp',
+          barberName: 'Barber Minh',
+          price: 100000,
+          date: getOffsetDateString(0),
+          time: '10:00',
+          createdAt: Date.now() - 2 * 60 * 60 * 1000, // Đặt 2 tiếng trước (< 1 ngày) -> ĐƯỢC PHÉP HỦY
+          status: 'pending'
+        },
+        {
+          id: 'appt-2',
+          customerName: 'Trần Văn Bình',
+          serviceName: 'Uốn tóc Texture & Phồng chân',
+          barberName: 'Barber An',
+          price: 450000,
+          date: getOffsetDateString(0),
+          time: '14:00',
+          createdAt: Date.now() - 5 * 60 * 60 * 1000,
+          status: 'confirmed' // ĐÃ DUYỆT BỞI ADMIN -> KHÔNG THỂ HỦY
+        },
+        {
+          id: 'appt-3',
+          customerName: 'Lê Hoàng Nam',
+          serviceName: 'Cắt tóc tạo kiểu cao cấp',
+          barberName: 'Barber Minh',
+          price: 100000,
+          date: getOffsetDateString(0),
+          time: '09:00',
+          createdAt: Date.now() - 36 * 60 * 60 * 1000, // Đặt 36 tiếng trước (> 1 ngày) -> QUÁ HẠN 1 NGÀY, KHÔNG THỂ HỦY
+          status: 'pending'
+        }
+      ]
+    };
+
+    function getOffsetDateString(offset) {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      return d.toISOString().split('T')[0];
+    }
+
+    function formatMoney(amount) {
+      return amount.toLocaleString('vi-VN') + ' đ';
+    }
+
+    function showToast(msg, icon = '✅') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').innerText = msg;
+      document.getElementById('toast-icon').innerText = icon;
+      toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-3');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 3500);
+    }
+
+    function triggerForgotPasswordDemo(roleName) {
+      alert(`[Demo Khôi phục mật khẩu]\n\nHệ thống HairMatch đã gửi hướng dẫn đặt lại mật khẩu đến Số điện thoại/Email đăng ký của ${roleName}.\n(Ở bản chính thức, mã OTP sẽ được gửi về thiết bị).`);
+    }
+
+    // Portal Switching
+    function selectPortal(portal) {
+      state.authPortal = portal;
+      const tabCust = document.getElementById('tab-portal-customer');
+      const tabAdm = document.getElementById('tab-portal-admin');
+      const contentCust = document.getElementById('portal-customer-content');
+      const contentAdm = document.getElementById('portal-admin-content');
+
+      if (portal === 'customer') {
+        tabCust.className = 'py-2 text-xs font-bold rounded-lg btn-gold transition';
+        tabAdm.className = 'py-2 text-xs font-bold rounded-lg btn-secondary transition';
+        contentCust.classList.remove('hidden');
+        contentAdm.classList.add('hidden');
+      } else {
+        tabAdm.className = 'py-2 text-xs font-bold rounded-lg btn-gold transition';
+        tabCust.className = 'py-2 text-xs font-bold rounded-lg btn-secondary transition';
+        contentAdm.classList.remove('hidden');
+        contentCust.classList.add('hidden');
+      }
+    }
+
+    function setCustomerAuthMode(mode) {
+      const formLogin = document.getElementById('form-cust-login');
+      const formRegister = document.getElementById('form-cust-register');
+      const tabLogin = document.getElementById('subtab-cust-login');
+      const tabRegister = document.getElementById('subtab-cust-register');
+
+      if (mode === 'login') {
+        formLogin.classList.remove('hidden');
+        formRegister.classList.add('hidden');
+        tabLogin.className = 'pb-1 gold-text border-b-2 border-amber-400';
+        tabRegister.className = 'pb-1 text-neutral-400 hover:text-white';
+      } else {
+        formLogin.classList.add('hidden');
+        formRegister.classList.remove('hidden');
+        tabRegister.className = 'pb-1 gold-text border-b-2 border-amber-400';
+        tabLogin.className = 'pb-1 text-neutral-400 hover:text-white';
+      }
+    }
+
+    function loginAs(role, name) {
+      state.currentUser = { role, name };
+      document.getElementById('view-auth').classList.add('hidden');
+      document.getElementById('btn-logout').classList.remove('hidden');
+
+      if (role === 'customer') {
+        document.getElementById('view-customer').classList.remove('hidden');
+        document.getElementById('view-admin').classList.add('hidden');
+        document.getElementById('header-user-status').innerText = `Khách hàng: ${name}`;
+        document.getElementById('prof-cust-name').value = name;
+        switchCustomerTab('home');
+        renderHomeServicesAndBarbers();
+        renderServices();
+        renderBarbers();
+        renderDateTabs();
+        renderSlots();
+        updateBadge();
+        showToast(`Đăng nhập thành công! Xin chào ${name}.`);
+      } else {
+        document.getElementById('view-admin').classList.remove('hidden');
+        document.getElementById('view-customer').classList.add('hidden');
+        document.getElementById('header-user-status').innerText = `Quản trị viên: ${name}`;
+        switchAdminTab('stats');
+        showToast(`Chào mừng chủ salon HairMatch!`, '👑');
+      }
+    }
+
+    function handleRegisterCustomer() {
+      const name = document.getElementById('reg-cust-name').value.trim();
+      const phone = document.getElementById('reg-cust-phone').value.trim();
+      const email = document.getElementById('reg-cust-email').value.trim();
+      const pass = document.getElementById('reg-cust-pass').value;
+
+      if (!name) { alert('Vui lòng nhập họ và tên.'); return; }
+      if (!phone && !email) { alert('Vui lòng nhập ít nhất Số điện thoại hoặc Email.'); return; }
+      if (!pass || pass.length < 8) { alert('Mật khẩu cần tối thiểu 8 ký tự.'); return; }
+
+      showToast('Đăng ký tài khoản thành công!', '🎉');
+      loginAs('customer', name);
+    }
+
+    function handleLogout() {
+      state.currentUser = null;
+      document.getElementById('view-customer').classList.add('hidden');
+      document.getElementById('view-admin').classList.add('hidden');
+      document.getElementById('view-auth').classList.remove('hidden');
+      document.getElementById('btn-logout').classList.add('hidden');
+      document.getElementById('header-user-status').innerText = 'Vui lòng đăng nhập để sử dụng';
+      showToast('Đã đăng xuất tài khoản.', 'ℹ️');
+    }
+
+    // Customer Navigation (4 Tabs)
+    function switchCustomerTab(tab) {
+      state.customerTab = tab;
+      document.getElementById('cust-page-home').classList.toggle('hidden', tab !== 'home');
+      document.getElementById('cust-page-ai').classList.toggle('hidden', tab !== 'ai');
+      document.getElementById('cust-page-book').classList.toggle('hidden', tab !== 'book');
+      document.getElementById('cust-page-profile').classList.toggle('hidden', tab !== 'profile');
+
+      ['home', 'ai', 'book', 'profile'].forEach(t => {
+        const btn = document.getElementById(`cust-tab-${t}`);
+        if (t === tab) {
+          btn.className = 'py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-gold flex flex-col md:flex-row items-center justify-center gap-1';
+        } else {
+          btn.className = 'py-2.5 px-2 rounded-xl text-xs md:text-sm font-bold btn-secondary flex flex-col md:flex-row items-center justify-center gap-1';
+        }
+      });
+
+      if (tab === 'home') renderHomeServicesAndBarbers();
+      if (tab === 'book') {
+        renderServices();
+        renderBarbers();
+        renderDateTabs();
+        renderSlots();
+        renderCustomerAppointments();
+      }
+    }
+
+    function switchBookingSubtab(sub) {
+      state.bookingSubtab = sub;
+      const btnNew = document.getElementById('book-subtab-new');
+      const btnMy = document.getElementById('book-subtab-my');
+      const flow = document.getElementById('booking-flow-container');
+      const myAppts = document.getElementById('my-appointments-container');
+
+      if (sub === 'new') {
+        btnNew.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg btn-gold transition';
+        btnMy.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg btn-secondary transition';
+        flow.classList.remove('hidden');
+        myAppts.classList.add('hidden');
+      } else {
+        btnMy.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg btn-gold transition';
+        btnNew.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg btn-secondary transition';
+        flow.classList.add('hidden');
+        myAppts.classList.remove('hidden');
+        renderCustomerAppointments();
+      }
+    }
+
+    function renderHomeServicesAndBarbers() {
+      const svcContainer = document.getElementById('home-service-list');
+      if (svcContainer) {
+        svcContainer.innerHTML = state.services.map(svc => `
+          <div class="card rounded-2xl p-4 flex flex-col justify-between hover:border-amber-400 transition">
+            <div>
+              <div class="flex justify-between items-center">
+                <h4 class="font-bold text-white text-sm">${svc.name}</h4>
+                <span class="gold-text font-bold text-xs">${formatMoney(svc.price)}</span>
+              </div>
+              <p class="text-xs text-neutral-400 mt-1">${svc.desc}</p>
+            </div>
+            <div class="flex justify-between items-center mt-3 pt-2 border-t border-neutral-800">
+              <span class="text-xs text-neutral-500">⏱ ${svc.duration} phút</span>
+              <button onclick="bookSpecificService('${svc.id}')" class="text-xs gold-text font-bold hover:underline">
+                Đặt dịch vụ này ➔
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      const barberContainer = document.getElementById('home-barber-list');
+      if (barberContainer) {
+        barberContainer.innerHTML = state.barbers.map(barber => `
+          <div class="card rounded-2xl p-4 flex items-center justify-between hover:border-amber-400 transition">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-lg border border-amber-400/50">
+                💈
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-sm">${barber.name}</h4>
+                <p class="text-xs text-neutral-400">${barber.bio}</p>
+              </div>
+            </div>
+            <button onclick="bookWithSpecificBarber('${barber.id}')" class="px-3 py-1.5 rounded-lg btn-secondary text-xs font-bold gold-text">
+              Chọn thợ ➔
+            </button>
+          </div>
+        `).join('');
+      }
+    }
+
+    function bookSpecificService(svcId) {
+      selectService(svcId);
+      switchCustomerTab('book');
+      switchBookingSubtab('new');
+    }
+
+    function bookWithSpecificBarber(barberId) {
+      selectBarber(barberId);
+      switchCustomerTab('book');
+      switchBookingSubtab('new');
+    }
+
+    // Render Booking Services
+    function renderServices() {
+      const container = document.getElementById('service-list');
+      if (!container) return;
+      container.innerHTML = state.services.map(svc => {
+        const isSel = svc.id === state.selectedServiceId;
+        return `
+          <div onclick="selectService('${svc.id}')" class="p-3.5 rounded-xl cursor-pointer transition border ${isSel ? 'border-amber-400 bg-amber-400/10' : 'border-neutral-800 bg-[#161616] hover:border-neutral-700'}">
+            <div class="flex justify-between items-center mb-1">
+              <h4 class="font-bold text-sm text-white">${svc.name}</h4>
+              <span class="gold-text font-bold text-xs">${formatMoney(svc.price)}</span>
+            </div>
+            <p class="text-xs text-neutral-400">${svc.desc}</p>
+            <span class="text-[11px] text-neutral-500 mt-2 block">⏱ Thời lượng: ${svc.duration} phút</span>
+          </div>
+        `;
+      }).join('');
+      const sel = state.services.find(s => s.id === state.selectedServiceId);
+      document.getElementById('selected-svc-hint').innerText = sel ? `${sel.name} (${formatMoney(sel.price)})` : 'Chưa chọn';
+      updateBookingSummary();
+    }
+
+    function selectService(id) {
+      state.selectedServiceId = id;
+      renderServices();
+    }
+
+    // Render Booking Barbers
+    function renderBarbers() {
+      const container = document.getElementById('barber-list');
+      if (!container) return;
+      container.innerHTML = state.barbers.map(barber => {
+        const isSel = barber.id === state.selectedBarberId;
+        return `
+          <div onclick="selectBarber('${barber.id}')" class="p-3.5 rounded-xl cursor-pointer transition border ${isSel ? 'border-amber-400 bg-amber-400/10' : 'border-neutral-800 bg-[#161616] hover:border-neutral-700'}">
+            <h4 class="font-bold text-sm text-white">${barber.name}</h4>
+            <p class="text-xs text-neutral-400 mt-1">${barber.bio}</p>
+          </div>
+        `;
+      }).join('');
+      const sel = state.barbers.find(b => b.id === state.selectedBarberId);
+      document.getElementById('selected-barber-hint').innerText = sel ? sel.name : 'Chưa chọn';
+      updateBookingSummary();
+    }
+
+    function selectBarber(id) {
+      state.selectedBarberId = id;
+      state.selectedSlot = null;
+      renderBarbers();
+      renderSlots();
+    }
+
+    // Render Date Tabs
+    function renderDateTabs() {
+      const container = document.getElementById('date-tabs');
+      if (!container) return;
+      const tabs = [
+        { offset: 0, label: 'Hôm nay' },
+        { offset: 1, label: 'Ngày mai' },
+        { offset: 2, label: '+2 ngày' },
+        { offset: 3, label: '+3 ngày' }
+      ];
+      container.innerHTML = tabs.map(tab => {
+        const isSel = tab.offset === state.selectedDateOffset;
+        const dateStr = getOffsetDateString(tab.offset);
+        return `
+          <button onclick="selectDate(${tab.offset})" class="px-3 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${isSel ? 'btn-gold' : 'btn-secondary'}">
+            <div>${tab.label}</div>
+            <div class="text-[10px] ${isSel ? 'text-black/80' : 'text-neutral-400'}">${dateStr.slice(5)}</div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectDate(offset) {
+      state.selectedDateOffset = offset;
+      state.selectedSlot = null;
+      renderDateTabs();
+      renderSlots();
+    }
+
+    // Slots & Mutex Collision Check
+    function renderSlots() {
+      const container = document.getElementById('slot-list');
+      if (!container) return;
+      const allSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
+      const currentDateStr = getOffsetDateString(state.selectedDateOffset);
+
+      const bookedSlots = state.appointments
+        .filter(a => a.date === currentDateStr && a.barberName.includes(state.selectedBarberId === 'barber-1' ? 'Minh' : 'An') && a.status !== 'cancelled')
+        .map(a => a.time);
+
+      container.innerHTML = allSlots.map(time => {
+        const isBooked = bookedSlots.includes(time);
+        const isSelected = state.selectedSlot === time;
+        if (isBooked) {
+          return `
+            <button disabled class="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#141414] text-neutral-600 border border-neutral-900 cursor-not-allowed line-through">
+              ${time} (Đã kín)
+            </button>
+          `;
+        }
+        return `
+          <button onclick="selectSlot('${time}')" class="px-3.5 py-2 rounded-xl text-xs font-bold transition border ${isSelected ? 'btn-gold border-amber-400 scale-105 shadow-md' : 'btn-secondary border-neutral-800'}">
+            ${time}
+          </button>
+        `;
+      }).join('');
+      updateBookingSummary();
+    }
+
+    function selectSlot(time) {
+      state.selectedSlot = time;
+      renderSlots();
+    }
+
+    function updateBookingSummary() {
+      const card = document.getElementById('booking-confirm-card');
+      if (!state.selectedSlot) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      const svc = state.services.find(s => s.id === state.selectedServiceId);
+      const barber = state.barbers.find(b => b.id === state.selectedBarberId);
+      const dateStr = getOffsetDateString(state.selectedDateOffset);
+
+      document.getElementById('summary-svc').innerText = svc.name;
+      document.getElementById('summary-barber').innerText = barber.name;
+      document.getElementById('summary-time').innerText = `${state.selectedSlot} ngày ${dateStr}`;
+      document.getElementById('summary-price').innerText = formatMoney(svc.price);
+    }
+
+    function handleConfirmBooking() {
+      if (!state.selectedSlot) {
+        alert('Vui lòng chọn khung giờ trống!');
+        return;
+      }
+      const svc = state.services.find(s => s.id === state.selectedServiceId);
+      const barber = state.barbers.find(b => b.id === state.selectedBarberId);
+      const dateStr = getOffsetDateString(state.selectedDateOffset);
+
+      // Mutex collision check
+      const isClash = state.appointments.some(a =>
+        a.date === dateStr &&
+        a.time === state.selectedSlot &&
+        a.barberName === barber.name &&
+        a.status !== 'cancelled'
+      );
+
+      if (isClash) {
+        alert('Lỗi đụng lịch: Khung giờ này vừa có khách khác đặt trước. Vui lòng chọn khung giờ khác!');
+        renderSlots();
+        return;
+      }
+
+      const newAppt = {
+        id: 'appt-' + Date.now(),
+        customerName: state.currentUser?.name || 'Khách hàng demo',
+        serviceName: svc.name,
+        barberName: barber.name,
+        price: svc.price,
+        date: dateStr,
+        time: state.selectedSlot,
+        createdAt: Date.now(), // Vừa đặt xong (0 tiếng trước, trong vòng 1 ngày -> ĐƯỢC PHÉP HỦY)
+        status: 'pending'
+      };
+
+      state.appointments.unshift(newAppt);
+      state.selectedSlot = null;
+      renderSlots();
+      updateBadge();
+      showToast('Đặt lịch thành công! Lịch hẹn đang chờ tiệm duyệt.', '🎉');
+      switchBookingSubtab('my');
+    }
+
+    function updateBadge() {
+      const activeCount = state.appointments.filter(a => a.status !== 'cancelled').length;
+      const badgeCust = document.getElementById('badge-appt-count');
+      const subtabCount = document.getElementById('book-subtab-count');
+      if (badgeCust) badgeCust.innerText = activeCount;
+      if (subtabCount) subtabCount.innerText = activeCount;
+
+      const badgeAdm = document.getElementById('badge-admin-pending');
+      if (badgeAdm) {
+        const pendingCount = state.appointments.filter(a => a.status === 'pending').length;
+        badgeAdm.innerText = pendingCount;
+      }
+    }
+
+    function filterCustomerAppts(status) {
+      state.currentFilter = status;
+      renderCustomerAppointments();
+    }
+
+    // ==========================================
+    // Render Appointments & Strict Cancellation Rule
+    // ==========================================
+    function renderCustomerAppointments() {
+      const container = document.getElementById('customer-appt-list');
+      if (!container) return;
+
+      const filtered = state.appointments.filter(a => {
+        if (state.currentFilter === 'all') return true;
+        return a.status === state.currentFilter;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="card p-6 rounded-2xl text-center text-xs text-neutral-400">Không có lịch hẹn nào trong danh mục này.</div>';
+        return;
+      }
+
+      const now = Date.now();
+
+      container.innerHTML = filtered.map(a => {
+        const statusMap = {
+          pending: { label: 'Chờ duyệt', color: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+          confirmed: { label: 'Đã duyệt', color: 'text-blue-400 bg-blue-400/10 border-blue-400/30' },
+          completed: { label: 'Hoàn thành', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
+          cancelled: { label: 'Đã hủy', color: 'text-red-400 bg-red-400/10 border-red-400/30' }
+        };
+        const s = statusMap[a.status] || statusMap.pending;
+
+        // Quy tắc thời gian thực hủy lịch theo yêu cầu của bạn:
+        // 1. Chỉ hủy được khi còn ở trạng thái Chờ duyệt (pending).
+        // 2. Chỉ hủy được trong vòng 24 giờ (1 ngày) kể từ thời điểm đặt.
+        // 3. Sau 1 ngày hoặc khi đã được Admin duyệt (confirmed) thì KHÔNG được hủy nữa.
+        const isWithinOneDay = a.createdAt ? (now - a.createdAt <= ONE_DAY_MS) : true;
+        const isPending = a.status === 'pending';
+        const isConfirmed = a.status === 'confirmed';
+        const canCancel = isPending && isWithinOneDay;
+
+        return `
+          <div class="card rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-white text-sm">${a.serviceName}</h4>
+                <span class="text-[11px] px-2 py-0.5 rounded-full border ${s.color}">${s.label}</span>
+              </div>
+              <p class="text-xs text-neutral-400">
+                Thợ: <strong class="text-neutral-200">${a.barberName}</strong> | Giờ hẹn: <strong class="gold-text">${a.time} ngày ${a.date}</strong>
+              </p>
+              <p class="text-xs font-bold text-emerald-400">${formatMoney(a.price)}</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              ${canCancel ? `
+                <button onclick="openCancelApptModal('${a.id}')" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-900 border border-red-700/60 text-red-400 hover:bg-red-950/40 hover:text-red-300 transition shadow-sm">
+                  Hủy lịch hẹn
+                </button>
+              ` : isConfirmed ? `
+                <span class="text-[11px] gold-text bg-amber-400/10 border border-amber-400/30 px-2.5 py-1.5 rounded-xl font-medium">
+                  🔒 Đã được Admin duyệt (Không thể tự hủy)
+                </span>
+              ` : isPending && !isWithinOneDay ? `
+                <span class="text-[11px] text-neutral-500 bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 rounded-xl italic">
+                  ⏳ Quá hạn 1 ngày (Không thể tự hủy)
+                </span>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Modal hủy lịch nội bộ (100% không bị chặn bởi confirm của browser)
+    function openCancelApptModal(id) {
+      state.pendingCancelId = id;
+      const appt = state.appointments.find(a => a.id === id);
+      if (appt) {
+        document.getElementById('modal-cancel-text').innerText =
+          `Bạn có chắc chắn muốn hủy lịch hẹn "${appt.serviceName}" vào lúc ${appt.time} ngày ${appt.date}? Lịch sau khi hủy sẽ giải phóng khung giờ cho khách khác.`;
+      }
+      document.getElementById('modal-cancel-appt').classList.remove('hidden');
+    }
+
+    function closeCancelApptModal() {
+      state.pendingCancelId = null;
+      document.getElementById('modal-cancel-appt').classList.add('hidden');
+    }
+
+    function executeCancelAppointment() {
+      if (!state.pendingCancelId) return;
+      const appt = state.appointments.find(a => a.id === state.pendingCancelId);
+      if (appt) {
+        appt.status = 'cancelled';
+        renderCustomerAppointments();
+        renderSlots();
+        updateBadge();
+        showToast('Đã hủy lịch hẹn thành công!', '🗑️');
+      }
+      closeCancelApptModal();
+    }
+
+    function handleUpdateProfile() {
+      const newName = document.getElementById('prof-cust-name').value.trim();
+      if (!newName) { alert('Họ tên không được để trống.'); return; }
+      state.currentUser.name = newName;
+      document.getElementById('header-user-status').innerText = `Khách hàng: ${newName}`;
+      showToast('Đã cập nhật thông tin cá nhân!');
+    }
+
+    // ==========================================
+    // AI Photo & Face Recognition Engine
+    // ==========================================
+    function handleUserPhotoUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      state.selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const imgUrl = e.target.result;
+        state.currentPhoto = {
+          url: imgUrl,
+          file: file,
+          label: file.name
+        };
+        showPreviewImage(imgUrl, `Ảnh: ${file.name}`);
+        showToast('Đã tải ảnh lên thành công!');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function showPreviewImage(url, badgeText) {
+      document.getElementById('photo-placeholder').classList.add('hidden');
+      const wrap = document.getElementById('photo-preview-wrap');
+      const img = document.getElementById('photo-preview');
+      const badge = document.getElementById('photo-status-badge');
+      img.src = url;
+      // Cắt gọn tên ảnh dài để tránh tràn giao diện
+      const shortBadge = badgeText.length > 20 ? badgeText.slice(0, 17) + '...' : badgeText;
+      badge.innerText = shortBadge;
+      badge.title = badgeText;
+      wrap.classList.remove('hidden');
+
+      // Ẩn bảng lỗi cũ nếu có
+      document.getElementById('ai-error-box').classList.add('hidden');
+      document.getElementById('ai-result-panel').classList.add('hidden');
+    }
+
+    async function callAiConsultation(imageFile, preferences) {
+      // Chuẩn hóa luồng bảo mật theo khuyến nghị: Client gửi ảnh tới Backend, Backend gọi AI
+      const formData = new FormData();
+      formData.append('image', imageFile);
+      formData.append('consent', 'true');
+      formData.append('preferences', JSON.stringify(preferences));
+
+      const res = await fetch('http://localhost:4000/api/ai/consultations', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + (state.backendToken || 'demo-customer-token')
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        let errMessage = `Lỗi máy chủ (${res.status})`;
+        try {
+          const errData = await res.json();
+          errMessage = errData.message || errMessage;
+        } catch (_) {}
+        throw new Error(errMessage);
+      }
+
+      return await res.json();
+    }
+
+    async function runAiConsultation() {
+      const errBox = document.getElementById('ai-error-box');
+      const resPanel = document.getElementById('ai-result-panel');
+      errBox.classList.add('hidden');
+      resPanel.classList.add('hidden');
+
+      // BẮT BUỘC: Phải có ảnh tải lên thì mới phân tích
+      if (!state.currentPhoto || !state.selectedFile) {
+        document.getElementById('ai-error-title').innerText = 'Chưa chọn ảnh khuôn mặt';
+        document.getElementById('ai-error-msg').innerText = 'Hệ thống yêu cầu phải có ảnh khuôn mặt người trực diện. Vui lòng bấm "📁 Tải ảnh từ máy" để chọn ảnh trước khi phân tích.';
+        errBox.classList.remove('hidden');
+        showToast('Lỗi: Bạn chưa chọn ảnh!', '❌');
+        return;
+      }
+
+      const btn = document.getElementById('btn-run-ai');
+      btn.innerHTML = '<span>🔍 Backend đang gửi ảnh tới Gemini AI phân tích...</span>';
+      btn.disabled = true;
+
+      try {
+        const preferences = {};
+
+        const data = await callAiConsultation(state.selectedFile, preferences);
+
+        // BẮT BUỘC: Kiểm tra kết quả nhận diện khuôn mặt người từ AI
+        if (!data.imageAssessment?.suitable || !data.haircutRecommendations || data.haircutRecommendations.length === 0) {
+          document.getElementById('ai-error-title').innerText = 'Ảnh chưa đạt yêu cầu tư vấn';
+          document.getElementById('ai-error-msg').innerText = data.imageAssessment?.message || 'Không phát hiện khuôn mặt người trực diện hoặc ảnh chưa đủ độ nét. Vui lòng chụp lại ảnh khuôn mặt người trực diện, rõ nét!';
+          errBox.classList.remove('hidden');
+          resPanel.classList.add('hidden');
+          showToast('Ảnh không chứa khuôn mặt hợp lệ!', '❌');
+          return;
+        }
+
+        // CÓ KHUÔN MẶT NGƯỜI ĐẠT CHUẨN -> HIỂN THỊ KẾT QUẢ TỪ AI
+        resPanel.classList.remove('hidden');
+        document.getElementById('res-face').innerText = data.faceShapeEstimate || 'Ước lượng sơ bộ từ ảnh';
+        
+        // Render các nhận xét khách quan
+        if (data.observations && data.observations.length > 0) {
+          document.getElementById('res-obs').innerHTML = data.observations.map(obs => `
+            <p class="flex items-start gap-1.5">• <span>${obs}</span></p>
+          `).join('');
+        } else {
+          document.getElementById('res-obs').innerHTML = `<p>${data.imageAssessment.message}</p>`;
+        }
+
+        const recs = data.haircutRecommendations;
+        document.getElementById('res-haircuts').innerHTML = recs.map((r, i) => {
+          const isGrowRequired = (r.feasibility || '').includes('Cần nuôi');
+          const feasibilityClass = isGrowRequired
+            ? 'bg-amber-950/60 text-amber-300 border-amber-700/50'
+            : 'bg-emerald-950/60 text-emerald-400 border-emerald-700/50';
+
+          return `
+          <div class="card rounded-xl p-3.5 space-y-2 border-neutral-700 bg-neutral-900/70 hover:border-amber-400 transition flex flex-col justify-between">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-neutral-800 text-amber-300 border border-neutral-700">
+                  ${r.direction || 'Gợi ý #' + (i+1)}
+                </span>
+                <span class="text-[10px] text-neutral-400 font-medium">Độ dài: ${r.length}</span>
+              </div>
+
+              <h4 class="font-bold text-sm text-white">${r.name}</h4>
+
+              <!-- Feasibility badge -->
+              <div class="text-[10px] font-semibold px-2 py-1 rounded-md border ${feasibilityClass}">
+                📌 ${r.feasibility || 'Thực hiện được ngay với độ dài tóc hiện tại'}
+              </div>
+
+              <!-- Reason -->
+              <p class="text-[11px] text-neutral-300 leading-relaxed italic">${r.reason}</p>
+
+              <!-- Technical details -->
+              <div class="text-[11px] text-neutral-400 space-y-1 pt-1 border-t border-neutral-800">
+                <p>🧴 <strong>Cách tạo kiểu:</strong> <span class="text-neutral-200">${r.stylingMethod || 'Sấy tạo phom tự nhiên'}</span></p>
+                <p>⏱️ <strong>Mức chăm sóc:</strong> <span class="text-neutral-200">${r.maintenance}</span></p>
+                <p>💈 <strong>Dịch vụ tương ứng:</strong> <span class="gold-text font-bold">${r.suggestedService || 'Cắt tóc tạo kiểu'}</span></p>
+              </div>
+
+              <!-- Barber Note -->
+              <div class="bg-black/40 p-2 rounded-lg text-[10px] text-amber-300">
+                💡 <strong>Lưu ý cho thợ:</strong> ${r.barberNote}
+              </div>
+            </div>
+
+            <button onclick="bookWithHaircut('${r.name.replace(/'/g, "\\'")}', '${r.barberNote.replace(/'/g, "\\'")}', '${(r.suggestedService || '').replace(/'/g, "\\'")}')" class="w-full py-2 rounded-lg btn-gold text-xs font-bold mt-2 shadow-md hover:scale-[1.02] transition">
+              ✂️ Đặt lịch kiểu tóc này
+            </button>
+          </div>
+        `;
+        }).join('');
+
+        if (data.colorAdvice) {
+          const colorsStr = data.colorAdvice.suggestedColors?.length ? `(Màu tham khảo: ${data.colorAdvice.suggestedColors.join(', ')})` : '';
+          document.getElementById('res-dye').innerText = `${data.colorAdvice.recommendation} ${colorsStr} — ${data.colorAdvice.reason}`;
+        }
+        if (data.permAdvice) {
+          document.getElementById('res-perm').innerText = `${data.permAdvice.recommendation} — ${data.permAdvice.reason}`;
+        }
+
+        showToast('Tư vấn sơ bộ hoàn tất!');
+      } catch (err) {
+        document.getElementById('ai-error-title').innerText = 'Không thể phân tích';
+        document.getElementById('ai-error-msg').innerText = err.message || 'Lỗi kết nối tới backend hoặc dịch vụ AI.';
+        errBox.classList.remove('hidden');
+        resPanel.classList.add('hidden');
+        showToast('Lỗi phân tích AI', '❌');
+      } finally {
+        btn.innerHTML = '<span>⚡ Phân tích & Gợi ý kiểu tóc ngay</span>';
+        btn.disabled = false;
+      }
+    }
+
+    function bookWithHaircut(name, note, serviceName) {
+      state.selectedHaircut = { name, note, serviceName };
+
+      // Khớp dịch vụ tương ứng trong danh mục thực tế của tiệm
+      let targetServiceId = 'svc-1'; // Mặc định Cắt tóc
+      if (serviceName && serviceName.includes('Uốn')) {
+        targetServiceId = 'svc-3'; // Uốn tóc Texture & Phồng chân
+      } else if (serviceName && serviceName.includes('Nhuộm')) {
+        targetServiceId = 'svc-4'; // Nhuộm màu thời trang
+      } else if (serviceName && serviceName.includes('Gội')) {
+        targetServiceId = 'svc-2'; // Gội đầu dưỡng sinh
+      }
+      selectService(targetServiceId);
+
+      switchCustomerTab('book');
+      switchBookingSubtab('new');
+
+      const banner = document.getElementById('ai-haircut-banner');
+      if (banner) {
+        banner.classList.remove('hidden');
+        document.getElementById('ai-haircut-name').innerText = name;
+        document.getElementById('ai-haircut-note').innerText = 'Lưu ý thợ: ' + note;
+      }
+      showToast(`Đã chọn kiểu tóc "${name}". Hãy chọn thợ và khung giờ để hoàn tất!`);
+    }
+
+    // Admin Renders
+    function switchAdminTab(tab) {
+      state.adminTab = tab;
+      document.getElementById('admin-page-stats').classList.toggle('hidden', tab !== 'stats');
+      document.getElementById('admin-page-appts').classList.toggle('hidden', tab !== 'appts');
+      document.getElementById('admin-page-manage').classList.toggle('hidden', tab !== 'manage');
+
+      ['stats', 'appts', 'manage'].forEach(t => {
+        const btn = document.getElementById(`admin-tab-${t}`);
+        if (t === tab) {
+          btn.className = 'px-4 py-2 rounded-xl text-sm font-bold btn-gold';
+        } else {
+          btn.className = 'px-4 py-2 rounded-xl text-sm font-bold btn-secondary';
+        }
+      });
+      if (tab === 'stats') renderAdminStats();
+      if (tab === 'appts') renderAdminAppointments();
+      if (tab === 'manage') renderAdminManage();
+    }
+
+    function renderAdminStats() {
+      const total = state.appointments.length;
+      const pending = state.appointments.filter(a => a.status === 'pending').length;
+      const completed = state.appointments.filter(a => a.status === 'completed').length;
+      const revenue = state.appointments.filter(a => a.status === 'completed').reduce((sum, a) => sum + a.price, 0);
+
+      document.getElementById('stat-total').innerText = total;
+      document.getElementById('stat-pending').innerText = pending;
+      document.getElementById('stat-completed').innerText = completed;
+      document.getElementById('stat-revenue').innerText = formatMoney(revenue);
+      updateBadge();
+    }
+
+    function renderAdminAppointments() {
+      const container = document.getElementById('admin-appt-list');
+      if (!container) return;
+      container.innerHTML = state.appointments.map(a => {
+        const statusMap = {
+          pending: { label: 'Chờ duyệt', color: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+          confirmed: { label: 'Đã xác nhận', color: 'text-blue-400 bg-blue-400/10 border-blue-400/30' },
+          completed: { label: 'Hoàn thành', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
+          cancelled: { label: 'Đã hủy', color: 'text-red-400 bg-red-400/10 border-red-400/30' }
+        };
+        const s = statusMap[a.status] || statusMap.pending;
+
+        return `
+          <div class="card rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-white text-sm">${a.customerName} - ${a.serviceName}</h4>
+                <span class="text-[11px] px-2 py-0.5 rounded-full border ${s.color}">${s.label}</span>
+              </div>
+              <p class="text-xs text-neutral-400 mt-1">
+                Thợ: <strong class="text-neutral-200">${a.barberName}</strong> | Thời gian: <strong class="gold-text">${a.time} ngày ${a.date}</strong> | Giá: <strong class="text-emerald-400">${formatMoney(a.price)}</strong>
+              </p>
+            </div>
+            <div class="flex gap-2">
+              ${a.status === 'pending' ? `
+                <button onclick="adminChangeStatus('${a.id}', 'confirmed')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold btn-gold shadow-md">
+                  ✓ Duyệt lịch
+                </button>
+              ` : ''}
+              ${a.status === 'confirmed' ? `
+                <button onclick="adminChangeStatus('${a.id}', 'completed')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-black shadow-md">
+                  ✓ Hoàn thành
+                </button>
+              ` : ''}
+              ${a.status !== 'cancelled' && a.status !== 'completed' ? `
+                <button onclick="adminChangeStatus('${a.id}', 'cancelled')" class="px-3.5 py-1.5 rounded-xl text-xs btn-secondary text-red-400 hover:text-red-300">
+                  Hủy
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function adminChangeStatus(id, newStatus) {
+      const appt = state.appointments.find(a => a.id === id);
+      if (appt) {
+        appt.status = newStatus;
+        renderAdminAppointments();
+        renderAdminStats();
+        updateBadge();
+        showToast(`Đã chuyển trạng thái lịch sang "${newStatus === 'confirmed' ? 'Đã duyệt' : newStatus === 'completed' ? 'Hoàn thành' : 'Đã hủy'}"!`);
+      }
+    }
+
+    function renderAdminManage() {
+      const svcContainer = document.getElementById('admin-service-list');
+      if (svcContainer) {
+        svcContainer.innerHTML = state.services.map(svc => `
+          <div class="p-3 bg-neutral-900/60 rounded-xl flex justify-between items-center border border-neutral-800 text-xs">
+            <div>
+              <p class="font-bold text-white">${svc.name} (${svc.duration}p)</p>
+              <p class="text-neutral-400">${formatMoney(svc.price)}</p>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-emerald-900/40 text-emerald-400 font-bold">Đang phục vụ</span>
+          </div>
+        `).join('');
+      }
+
+      const barberContainer = document.getElementById('admin-barber-list');
+      if (barberContainer) {
+        barberContainer.innerHTML = state.barbers.map(barber => `
+          <div class="p-3 bg-neutral-900/60 rounded-xl flex justify-between items-center border border-neutral-800 text-xs">
+            <div>
+              <p class="font-bold text-white">${barber.name}</p>
+              <p class="text-neutral-400">${barber.bio}</p>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-emerald-900/40 text-emerald-400 font-bold">Đang làm việc</span>
+          </div>
+        `).join('');
+      }
+    }
+  </script>
+</body>
+</html>
