@@ -16,7 +16,9 @@
           "microphonePermission": false
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-notifications",
+      "@react-native-community/datetimepicker"
     ],
     "ios": {
       "supportsTablet": true,
@@ -27,4 +29,3 @@
     }
   }
 }
-

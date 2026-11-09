@@ -4,8 +4,10 @@ export type Role = "customer" | "admin";
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
+  | "in_progress"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "no_show";
 
 export interface User {
   id: string;
@@ -14,6 +16,12 @@ export interface User {
   email?: string;
   passwordHash?: string;
   role: Role;
+  tier?: "silver" | "gold" | "vip";
+  internalNote?: string;
+  blacklisted?: boolean;
+  hairHistory?: { id: string; date: string; style: string; color?: string; formula?: string; note?: string }[];
+  birthday?: string;
+  loyaltyPoints?: number;
 }
 
 export type PublicUser = Omit<User, "passwordHash">;
@@ -25,6 +33,11 @@ export interface HairService {
   price: number;
   durationMinutes: number;
   active: boolean;
+  futureAppointmentCount?: number;
+  category?: "cut" | "wash" | "chemical" | "care" | "combo";
+  imageUrl?: string;
+  process?: string;
+  promotionPrice?: number | null;
 }
 
 export interface Barber {
@@ -33,6 +46,14 @@ export interface Barber {
   bio: string;
   imageUrl: string;
   active: boolean;
+  futureAppointmentCount?: number;
+  phone?: string;
+  title?: "master" | "top" | "junior";
+  serviceIds?: string[] | null;
+  commissionRate?: number;
+  ratingAverage?: number | null;
+  reviewCount?: number;
+  portfolio?: { styleName: string; photo?: string; rating?: number }[];
 }
 
 export interface WorkSchedule {
@@ -41,21 +62,42 @@ export interface WorkSchedule {
   date: string;
   startTime: string;
   endTime: string;
+  activeAppointmentCount?: number;
+  sourceWeeklyId?: string;
 }
 
 export interface Appointment {
   id: string;
   customerId: string;
   customerNameSnapshot: string;
+  customerPhoneSnapshot?: string;
   barberId: string;
   barberNameSnapshot: string;
   serviceId: string;
   serviceNameSnapshot: string;
+  serviceIds?: string[];
+  serviceItems?: { id: string; name: string; price: number; durationMinutes: number }[];
   priceSnapshot: number;
   durationSnapshot: number;
   startAt: string;
   endAt: string;
   status: AppointmentStatus;
+  walkIn?: boolean;
+  voucherCode?: string;
+  discountAmount?: number;
+  paymentMethod?: "cash" | "transfer" | "card";
+  amountPaid?: number;
+  startedAt?: string;
+  rating?: number;
+  review?: string;
+  reviewPhoto?: string;
+  portfolioConsent?: boolean;
+  note?: string;
+  styleName?: string;
+  paymentChoice?: "salon" | "prepay";
+  aiHaircutName?: string;
+  aiBarberNote?: string;
+  cancelReason?: string;
   createdAt: string;
 }
 
@@ -120,6 +162,11 @@ export interface Statistics {
   confirmed: number;
   completed: number;
   cancelled: number;
-  revenue: number;
+  completedValue: number;
+  from: string;
+  to: string;
+  timeZone: string;
+  todayAppointments: Appointment[];
+  needsAction: Appointment[];
 }
 

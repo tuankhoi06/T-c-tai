@@ -35,7 +35,7 @@ describe("Phân quyền & Bảo mật (Authorization & Security)", () => {
     });
 
     // Customer2 tries to cancel customer1's appointment -> Must throw AppError(403, "Không có quyền hủy lịch này.")
-    expect(() => booking.cancel(customer2, appt.id)).toThrowError(
+    expect(() => booking.cancel(customer2, appt.id, "Không đến được")).toThrowError(
       expect.objectContaining({
         status: 403,
         message: "Không có quyền hủy lịch này."

@@ -16,7 +16,7 @@ export const preferencesSchema = z.object({
   wantsDye: z.boolean().optional().default(false),
   wantsPerm: z.boolean().optional().default(false),
   hairCondition: z.string().max(300).optional().default("")
-}).default({});
+});
 
 export type Preferences = z.infer<typeof preferencesSchema>;
 
@@ -338,10 +338,13 @@ LƯU Ý:
 Trả về ĐÚNG ĐỊNH DẠNG JSON theo cấu trúc trên.
 `;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.key}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": this.key
+        },
         body: JSON.stringify({
           contents: [
             {
@@ -409,10 +412,17 @@ Trả về ĐÚNG ĐỊNH DẠNG JSON theo cấu trúc trên.
       return result;
     } catch (error) {
       if (error instanceof AppError) throw error;
+      const causeCode = (error as { cause?: { code?: string } })?.cause?.code;
+      if (error instanceof TypeError && error.message === "fetch failed") {
+        if (causeCode) console.error("Gemini network error:", causeCode);
+        throw new AppError(
+          502,
+          "Máy chủ không kết nối được Gemini. Kiểm tra Internet hoặc tường lửa trên máy chạy backend."
+        );
+      }
       throw new AppError(
         502,
-        "Không thể phân tích bằng AI: " +
-          (error instanceof Error ? error.message : "Lỗi kết nối")
+        "Không thể hoàn tất phân tích Gemini. Hãy thử lại sau."
       );
     }
   }

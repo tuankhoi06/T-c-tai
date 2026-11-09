@@ -1,9 +1,11 @@
 import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { MemoryRepository } from "./repository.js";
+import { startReminderWorker } from "./notifications.js";
 
 const repo = new MemoryRepository();
 await repo.seed();
+startReminderWorker(repo);
 
 const app = createApp(repo);
 

@@ -30,6 +30,8 @@ import {
   ConsultationService,
   preferencesSchema
 } from "./ai.js";
+import { registerAdminOperations } from "./admin-operations.js";
+import { sendPush } from "./notifications.js";
 
 import type { User } from "./models.js";
 import type { Repository } from "./repository.js";
@@ -57,14 +59,22 @@ const serviceSchema = z.object({
   description: z.string().max(1000),
   price: z.number().int().min(0).max(100000000),
   durationMinutes: z.number().int().min(15).max(480),
-  active: z.boolean()
+  active: z.boolean(),
+  category: z.enum(["cut", "wash", "chemical", "care", "combo"]).optional(),
+  imageUrl: z.union([z.literal(""), z.string().url()]).optional(),
+  process: z.string().max(2000).optional(),
+  promotionPrice: z.number().int().min(0).max(100000000).nullable().optional()
 });
 
 const barberSchema = z.object({
   name: z.string().trim().min(1).max(100),
   bio: z.string().max(1000),
   imageUrl: z.union([z.literal(""), z.string().url()]),
-  active: z.boolean()
+  active: z.boolean(),
+  phone: phoneSchema.optional().or(z.literal("")),
+  title: z.enum(["master", "top", "junior"]).optional(),
+  serviceIds: z.array(z.string()).nullable().optional(),
+  commissionRate: z.number().min(0).max(100).optional()
 });
 
 const scheduleSchema = z.object({
@@ -100,7 +110,7 @@ export function createApp(repo: Repository) {
     })
   );
 
-  app.use(express.json({ limit: "100kb" }));
+  app.use(express.json({ limit: "400kb" }));
 
   app.get("/api/health", (_req, res) => {
     res.json({
@@ -279,12 +289,15 @@ export function createApp(repo: Repository) {
     "/api/me",
     wrap((req, res) => {
       const body = z.object({
-        name: z.string().trim().min(2).max(100)
+        name: z.string().trim().min(2).max(100).optional(),
+        birthday: z.string().refine(validDate, "Ngày sinh không hợp lệ.").optional()
       }).parse(req.body);
+      ensure(body.name || body.birthday, 400, "Không có thông tin cần cập nhật.");
 
       const user: User = {
         ...res.locals.user,
-        name: body.name
+        ...(body.name ? { name: body.name } : {}),
+        ...(body.birthday ? { birthday: body.birthday } : {})
       };
 
       repo.users.put(user);
@@ -309,7 +322,14 @@ export function createApp(repo: Repository) {
 
   app.get("/api/barbers", (_req, res) => {
     res.json(
-      repo.barbers.all().filter((barber) => barber.active)
+      repo.barbers.all().filter((barber) => barber.active).map((barber) => {
+        const reviews = repo.appointments.all().filter((item) => item.barberId === barber.id && item.rating);
+        return { ...barber, reviewCount: reviews.length,
+          ratingAverage: reviews.length ? Math.round(reviews.reduce((total, item) => total + (item.rating || 0), 0) * 10 / reviews.length) / 10 : null,
+          portfolio: repo.appointments.all().filter((item) => item.barberId === barber.id && item.status === "completed" && item.portfolioConsent && (item.styleName || item.reviewPhoto))
+            .sort((a, b) => b.startAt.localeCompare(a.startAt)).slice(0, 4)
+            .map((item) => ({ styleName: item.styleName || item.serviceNameSnapshot, ...(item.reviewPhoto ? { photo: item.reviewPhoto } : {}), ...(item.rating ? { rating: item.rating } : {}) })) };
+      })
     );
   });
 
@@ -319,6 +339,7 @@ export function createApp(repo: Repository) {
       const query = z.object({
         barberId: z.string().min(1),
         serviceId: z.string().min(1),
+        serviceIds: z.string().optional(),
         date: z.string()
       }).parse(req.query);
 
@@ -326,7 +347,8 @@ export function createApp(repo: Repository) {
         booking.availability(
           query.barberId,
           query.serviceId,
-          query.date
+          query.date,
+          query.serviceIds?.split(",")
         )
       );
     })
@@ -354,12 +376,22 @@ export function createApp(repo: Repository) {
       const body = z.object({
         barberId: z.string().min(1),
         serviceId: z.string().min(1),
-        startAt: z.string().min(1)
+        serviceIds: z.array(z.string().min(1)).min(1).max(5).optional(),
+        startAt: z.string().min(1),
+        note: z.string().trim().max(500).optional(),
+        styleName: z.string().trim().max(100).optional(),
+        paymentChoice: z.literal("salon").optional(),
+        voucherCode: z.string().trim().max(30).optional(),
+        aiSuggestion: z.object({
+          haircutName: z.string().trim().min(1).max(100),
+          barberNote: z.string().trim().min(1).max(500)
+        }).optional()
       }).parse(req.body);
 
-      res.status(201).json(
-        await booking.create(res.locals.user, body)
-      );
+      const appointment = await booking.create(res.locals.user, body);
+      const notice = repo.notifications.all().find((item) => item.kind === "booking" && item.appointmentId === appointment.id);
+      if (notice) void sendPush(repo, [notice]);
+      res.status(201).json(appointment);
     })
   );
 
@@ -400,11 +432,69 @@ export function createApp(repo: Repository) {
     "/api/appointments/:id/cancel",
     customerOnly,
     wrap((req, res) => {
-      res.json(
-        booking.cancel(res.locals.user, req.params.id)
-      );
+      const { reason } = z.object({ reason: z.string().trim().min(3).max(500) }).parse(req.body);
+      const updated = booking.cancel(res.locals.user, req.params.id, reason);
+      const notice = repo.notifications.all().find((item) => item.appointmentId === updated.id && item.kind === "booking" && item.title === "Lịch hẹn đã được hủy");
+      if (notice) void sendPush(repo, [notice]);
+      res.json(updated);
     })
   );
+
+  app.patch("/api/appointments/:id/reschedule", customerOnly, wrap(async (req, res) => {
+    const existing = repo.appointments.get(req.params.id);
+    ensure(existing && existing.customerId === res.locals.user.id, 404, "Không tìm thấy lịch hẹn.");
+    ensure(DateTime.fromISO(existing.startAt).diffNow("hours").hours >= 2, 409, "Chỉ có thể đổi lịch trước giờ hẹn ít nhất 2 tiếng.");
+    const { barberId, startAt } = z.object({ barberId: z.string().min(1), startAt: z.string().min(1) }).parse(req.body);
+    const updated = await booking.reschedule(existing.id, { barberId, startAt,
+      serviceId: existing.serviceId, serviceIds: existing.serviceIds });
+    const pending = { ...updated, status: "pending" as const };
+    repo.appointments.put(pending);
+    const notice = { id: randomUUID(), customerId: pending.customerId, title: "Đã gửi yêu cầu đổi giờ",
+      body: `Giờ mới: ${DateTime.fromISO(pending.startAt).setZone(SHOP_ZONE).toFormat("HH:mm dd/MM")}. Đang chờ salon xác nhận.`,
+      kind: "booking" as const, appointmentId: pending.id, createdAt: new Date().toISOString(), read: false };
+    repo.notifications.put(notice); void sendPush(repo, [notice]);
+    res.json(pending);
+  }));
+
+  app.post("/api/appointments/:id/review", customerOnly, wrap((req, res) => {
+    const appointment = repo.appointments.get(req.params.id);
+    ensure(appointment && appointment.customerId === res.locals.user.id, 404, "Không tìm thấy lịch hẹn.");
+    ensure(appointment.status === "completed", 409, "Chỉ đánh giá lịch đã hoàn thành.");
+    ensure(!appointment.rating, 409, "Lịch này đã được đánh giá.");
+    const body = z.object({ rating: z.number().int().min(1).max(5), review: z.string().trim().max(500).optional(),
+      photo: z.string().regex(/^data:image\/(jpeg|png);base64,/).max(350000).optional(), portfolioConsent: z.boolean().optional() }).parse(req.body);
+    const updated = { ...appointment, rating: body.rating, review: body.review, reviewPhoto: body.photo, portfolioConsent: body.portfolioConsent === true };
+    repo.appointments.put(updated); res.json(updated);
+  }));
+
+  app.get("/api/vouchers/me", customerOnly, (_req, res) => {
+    const today = DateTime.now().setZone(SHOP_ZONE).toISODate()!;
+    res.json(repo.vouchers.all().filter((item) => item.active && item.to >= today && item.usedCount < item.maxUses &&
+      (!item.ownerId || item.ownerId === res.locals.user.id)));
+  });
+
+  app.post("/api/loyalty/redeem", customerOnly, wrap((_req, res) => {
+    const user: User = res.locals.user;
+    ensure((user.loyaltyPoints || 0) >= 100, 409, "Cần 100 điểm để đổi mã giảm 50.000đ.");
+    const now = DateTime.now().setZone(SHOP_ZONE);
+    const voucher = { id: randomUUID(), code: `DIEM${randomUUID().slice(0, 8).toUpperCase()}`,
+      kind: "fixed" as const, value: 50000, maxUses: 1, usedCount: 0,
+      from: now.toISODate()!, to: now.plus({ days: 30 }).toISODate()!, active: true, ownerId: user.id };
+    repo.vouchers.put(voucher);
+    const updated = { ...user, loyaltyPoints: (user.loyaltyPoints || 0) - 100 };
+    repo.users.put(updated);
+    res.status(201).json({ voucher, user: publicUser(updated) });
+  }));
+
+  app.get("/api/support/messages/me", customerOnly, (_req, res) => {
+    res.json(repo.supportMessages.all().filter((item) => item.customerId === res.locals.user.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  });
+  app.post("/api/support/messages", customerOnly, wrap((req, res) => {
+    const { body } = z.object({ body: z.string().trim().min(2).max(500) }).parse(req.body);
+    const message = { id: randomUUID(), customerId: res.locals.user.id, body, createdAt: new Date().toISOString() };
+    repo.supportMessages.put(message); res.status(201).json(message);
+  }));
 
   const aiLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
@@ -413,7 +503,7 @@ export function createApp(repo: Repository) {
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: {
-      message: "Đã vượt giới hạn tư vấn. Thử lại sau."
+      message: "Bạn đã dùng hết 8 lượt tư vấn trong 10 phút. Vui lòng đợi một lúc rồi thử lại."
     }
   });
 
@@ -431,8 +521,8 @@ export function createApp(repo: Repository) {
   app.post(
     "/api/ai/consultations",
     customerOnly,
-    aiLimiter,
     upload.single("image"),
+    aiLimiter,
     wrap(async (req, res) => {
       ensure(
         req.body.consent === "true",
@@ -490,13 +580,21 @@ export function createApp(repo: Repository) {
     wrap((req, res) => {
       const query = z.object({
         date: z.string().refine(validDate).optional(),
+        from: z.string().refine(validDate).optional(),
+        to: z.string().refine(validDate).optional(),
+        barberId: z.string().optional(),
+        q: z.string().trim().max(100).optional(),
         status: z.enum([
           "pending",
           "confirmed",
+          "in_progress",
           "completed",
-          "cancelled"
+          "cancelled",
+          "no_show"
         ]).optional()
       }).parse(req.query);
+      ensure(!query.from || !query.to || query.from <= query.to, 400, "Khoảng ngày không hợp lệ.");
+      const search = query.q?.toLocaleLowerCase("vi-VN");
 
       const appointments = repo.appointments.all()
         .filter((appointment) => {
@@ -507,6 +605,11 @@ export function createApp(repo: Repository) {
 
           return (
             (!query.date || date === query.date) &&
+            (!query.from || (date !== null && date >= query.from)) &&
+            (!query.to || (date !== null && date <= query.to)) &&
+            (!query.barberId || appointment.barberId === query.barberId) &&
+            (!search || [appointment.id, appointment.customerNameSnapshot, appointment.customerPhoneSnapshot || ""]
+              .some((value) => value.toLocaleLowerCase("vi-VN").includes(search))) &&
             (!query.status ||
               appointment.status === query.status)
           );
@@ -517,6 +620,91 @@ export function createApp(repo: Repository) {
     })
   );
 
+  const adminCustomer = (user: User) => { const { passwordHash, ...safe } = user; return safe; };
+  app.get("/api/admin/customers", (_req, res) => {
+    res.json(repo.users.all().filter((user) => user.role === "customer").map(adminCustomer));
+  });
+
+  const customerFields = z.object({
+    name: z.string().trim().min(2).max(100),
+    phone: phoneSchema.optional().or(z.literal("")),
+    email: z.string().email().optional().or(z.literal(""))
+  }).refine((value) => !!(value.phone || value.email), "Cần số điện thoại hoặc email.");
+
+  function uniqueCustomerContacts(phone: string | undefined, email: string | undefined, exceptId?: string) {
+    if (phone) ensure(!repo.users.all().some((user) => user.id !== exceptId && user.phone === phone), 409, "Số điện thoại đã được sử dụng.");
+    if (email) ensure(!repo.users.all().some((user) => user.id !== exceptId && user.email?.toLowerCase() === email), 409, "Email đã được sử dụng.");
+  }
+
+  app.post("/api/admin/customers", wrap(async (req, res) => {
+    const body = customerFields.and(z.object({ password: z.string().min(8).max(128), tier: z.enum(["silver", "gold", "vip"]).optional(), internalNote: z.string().max(2000).optional(), blacklisted: z.boolean().optional() })).parse(req.body);
+    const phone = body.phone || undefined;
+    const email = body.email?.trim().toLowerCase() || undefined;
+    uniqueCustomerContacts(phone, email);
+    const passwordHash = await hashPassword(body.password);
+    uniqueCustomerContacts(phone, email);
+    const customer: User = { id: randomUUID(), name: body.name, phone, email, passwordHash, role: "customer", tier: body.tier || "silver", internalNote: body.internalNote, blacklisted: body.blacklisted || false, hairHistory: [] };
+    repo.users.put(customer);
+    res.status(201).json(adminCustomer(customer));
+  }));
+
+  app.patch("/api/admin/customers/:id", wrap((req, res) => {
+    const existing = repo.users.get(req.params.id);
+    ensure(existing?.role === "customer", 404, "Không tìm thấy khách hàng.");
+    const body = customerFields.and(z.object({
+      tier: z.enum(["silver", "gold", "vip"]).optional(),
+      internalNote: z.string().max(2000).optional(),
+      blacklisted: z.boolean().optional(),
+      hairHistory: z.array(z.object({
+        id: z.string(), date: z.string().refine(validDate), style: z.string().max(100),
+        color: z.string().max(100).optional(), formula: z.string().max(500).optional(), note: z.string().max(500).optional()
+      })).max(100).optional()
+    })).parse({ name: existing.name, phone: existing.phone || "", email: existing.email || "", tier: existing.tier, internalNote: existing.internalNote, blacklisted: existing.blacklisted, hairHistory: existing.hairHistory, ...req.body });
+    const phone = body.phone || undefined;
+    const email = body.email?.trim().toLowerCase() || undefined;
+    uniqueCustomerContacts(phone, email, existing.id);
+    const updated: User = { ...existing, name: body.name, phone, email, tier: body.tier, internalNote: body.internalNote, blacklisted: body.blacklisted, hairHistory: body.hairHistory };
+    repo.users.put(updated);
+    res.json(adminCustomer(updated));
+  }));
+
+  app.delete("/api/admin/customers/:id", wrap((req, res) => {
+    const existing = repo.users.get(req.params.id);
+    ensure(existing?.role === "customer", 404, "Không tìm thấy khách hàng.");
+    ensure(!repo.appointments.all().some((item) => item.customerId === existing.id), 409, "Khách đã có lịch hẹn, không thể xóa lịch sử. Hãy giữ tài khoản này.");
+    ensure(!existing.hairHistory?.length, 409, "Khách đã có lịch sử tóc. Hãy giữ hồ sơ này.");
+    for (const notice of repo.notifications.all().filter((item) => item.customerId === existing.id)) repo.notifications.remove(notice.id);
+    for (const device of repo.pushDevices.all().filter((item) => item.customerId === existing.id)) repo.pushDevices.remove(device.id);
+    repo.users.remove(existing.id);
+    res.status(204).end();
+  }));
+
+  const adminBookingSchema = z.object({
+    barberId: z.string().min(1),
+    serviceId: z.string().min(1),
+    serviceIds: z.array(z.string().min(1)).min(1).max(5).optional(),
+    startAt: z.string().min(1),
+    voucherCode: z.string().trim().max(30).optional()
+  });
+
+  app.post("/api/admin/appointments", wrap(async (req, res) => {
+    const body = adminBookingSchema.extend({
+      customerId: z.string().optional(),
+      walkInName: z.string().trim().min(2).max(100).optional(),
+      walkInPhone: phoneSchema.optional()
+    }).parse(req.body);
+    const customer = body.customerId ? repo.users.get(body.customerId) : undefined;
+    ensure(customer?.role === "customer" || !!body.walkInName, 400, "Chọn khách hàng hoặc nhập tên khách vãng lai.");
+    const walkIn = !customer;
+    const booker: User = customer || { id: `walkin-${randomUUID()}`, name: body.walkInName!, phone: body.walkInPhone, passwordHash: "", role: "customer" };
+    res.status(201).json(await booking.create(booker, { ...body, walkIn }));
+  }));
+
+  app.patch("/api/admin/appointments/:id", wrap(async (req, res) => {
+    const body = adminBookingSchema.parse(req.body);
+    res.json(await booking.reschedule(req.params.id, body));
+  }));
+
   app.patch(
     "/api/admin/appointments/:id/status",
     wrap((req, res) => {
@@ -524,22 +712,40 @@ export function createApp(repo: Repository) {
         status: z.enum([
           "pending",
           "confirmed",
+          "in_progress",
           "completed",
-          "cancelled"
-        ])
+          "cancelled",
+          "no_show"
+        ]),
+        cancelReason: z.string().trim().min(3).max(500).optional(),
+        payment: z.object({ method: z.enum(["cash", "transfer", "card"]), amount: z.number().min(0) }).optional()
       }).parse(req.body);
 
-      res.json(
-        booking.changeStatus(
+      const updated = booking.changeStatus(
           req.params.id,
-          body.status
-        )
-      );
+          body.status,
+          body.cancelReason,
+          body.payment
+        );
+      const kinds = body.status === "completed" ? ["review_invite", "loyalty"] : ["booking"];
+      const notices = repo.notifications.all().filter((item) => item.appointmentId === updated.id && kinds.includes(item.kind));
+      if (notices.length) void sendPush(repo, notices);
+      res.json(updated);
     })
   );
 
-  app.get("/api/admin/statistics", (_req, res) => {
-    const appointments = repo.appointments.all();
+  app.get("/api/admin/statistics", wrap((req, res) => {
+    const query = z.object({
+      from: z.string().refine(validDate).optional(),
+      to: z.string().refine(validDate).optional()
+    }).parse(req.query);
+    const today = DateTime.now().setZone(SHOP_ZONE).toISODate()!;
+    const from = query.from || today;
+    const to = query.to || today;
+    ensure(from <= to, 400, "Khoảng ngày không hợp lệ.");
+    const all = repo.appointments.all();
+    const shopDay = (item: typeof all[number]) => DateTime.fromISO(item.startAt).setZone(SHOP_ZONE).toISODate()!;
+    const appointments = all.filter((item) => shopDay(item) >= from && shopDay(item) <= to);
 
     res.json({
       total: appointments.length,
@@ -549,26 +755,40 @@ export function createApp(repo: Repository) {
       confirmed: appointments.filter(
         (item) => item.status === "confirmed"
       ).length,
+      inProgress: appointments.filter((item) => item.status === "in_progress").length,
       completed: appointments.filter(
         (item) => item.status === "completed"
       ).length,
-      revenue: appointments
+      cancelled: appointments.filter((item) => item.status === "cancelled").length,
+      noShow: appointments.filter((item) => item.status === "no_show").length,
+      completedValue: appointments
         .filter((item) => item.status === "completed")
         .reduce(
           (sum, item) => sum + item.priceSnapshot,
           0
-        )
+        ),
+      paidRevenue: appointments.filter((item) => item.status === "completed").reduce((sum, item) => sum + (item.amountPaid || 0), 0),
+      expectedRevenue: appointments.filter((item) => ["pending", "confirmed", "in_progress"].includes(item.status)).reduce((sum, item) => sum + item.priceSnapshot, 0),
+      from,
+      to,
+      timeZone: SHOP_ZONE,
+      todayAppointments: all.filter((item) => shopDay(item) === today).sort((a, b) => a.startAt.localeCompare(b.startAt)),
+      needsAction: all.filter((item) => item.status === "pending" && shopDay(item) >= today).sort((a, b) => a.startAt.localeCompare(b.startAt))
     });
-  });
+  }));
 
   app.get("/api/admin/services", (_req, res) => {
-    res.json(repo.services.all());
+    const now = DateTime.now().toMillis();
+    res.json(repo.services.all().map((service) => ({ ...service,
+      futureAppointmentCount: repo.appointments.all().filter((item) => (item.serviceIds || [item.serviceId]).includes(service.id) && ["pending", "confirmed"].includes(item.status) && DateTime.fromISO(item.startAt).toMillis() > now).length
+    })));
   });
 
   app.post(
     "/api/admin/services",
     wrap((req, res) => {
       const body = serviceSchema.parse(req.body);
+      ensure(body.promotionPrice == null || body.promotionPrice <= body.price, 400, "Giá khuyến mãi không được cao hơn giá gốc.");
       const service = { id: randomUUID(), ...body };
       repo.services.put(service);
       res.status(201).json(service);
@@ -583,6 +803,7 @@ export function createApp(repo: Repository) {
 
       const changes = serviceSchema.partial().parse(req.body);
       const updated = { ...existing, ...changes };
+      ensure(updated.promotionPrice == null || updated.promotionPrice <= updated.price, 400, "Giá khuyến mãi không được cao hơn giá gốc.");
       repo.services.put(updated);
       res.json(updated);
     })
@@ -594,19 +815,33 @@ export function createApp(repo: Repository) {
       const existing = repo.services.get(req.params.id);
       ensure(existing, 404, "Không tìm thấy dịch vụ.");
 
+      if (req.query.permanent === "true") {
+        ensure(!repo.appointments.all().some((item) => (item.serviceIds || [item.serviceId]).includes(existing.id)), 409, "Dịch vụ đã có lịch hẹn. Hãy tạm ngừng để giữ lịch sử.");
+        for (const barber of repo.barbers.all()) {
+          if (barber.serviceIds?.includes(existing.id)) repo.barbers.put({ ...barber, serviceIds: barber.serviceIds.filter((id) => id !== existing.id) });
+        }
+        repo.services.remove(existing.id);
+        res.status(204).end();
+        return;
+      }
+
       repo.services.put({ ...existing, active: false });
       res.status(204).end();
     })
   );
 
   app.get("/api/admin/barbers", (_req, res) => {
-    res.json(repo.barbers.all());
+    const now = DateTime.now().toMillis();
+    res.json(repo.barbers.all().map((barber) => ({ ...barber,
+      futureAppointmentCount: repo.appointments.all().filter((item) => item.barberId === barber.id && ["pending", "confirmed"].includes(item.status) && DateTime.fromISO(item.startAt).toMillis() > now).length
+    })));
   });
 
   app.post(
     "/api/admin/barbers",
     wrap((req, res) => {
       const body = barberSchema.parse(req.body);
+      ensure(!body.serviceIds || body.serviceIds.every((id) => !!repo.services.get(id)), 400, "Có dịch vụ không tồn tại.");
       const barber = { id: randomUUID(), ...body };
       repo.barbers.put(barber);
       res.status(201).json(barber);
@@ -621,6 +856,8 @@ export function createApp(repo: Repository) {
 
       const changes = barberSchema.partial().parse(req.body);
       const updated = { ...existing, ...changes };
+      ensure(!updated.serviceIds || updated.serviceIds.every((id) => !!repo.services.get(id)), 400, "Có dịch vụ không tồn tại.");
+      ensure(!updated.serviceIds || repo.appointments.all().filter((item) => item.barberId === existing.id && ["pending", "confirmed", "in_progress"].includes(item.status)).every((item) => (item.serviceIds || [item.serviceId]).every((id) => updated.serviceIds!.includes(id))), 409, "Thợ còn lịch hẹn với dịch vụ này. Hãy đổi lịch trước khi bỏ kỹ năng.");
       repo.barbers.put(updated);
       res.json(updated);
     })
@@ -632,14 +869,56 @@ export function createApp(repo: Repository) {
       const existing = repo.barbers.get(req.params.id);
       ensure(existing, 404, "Không tìm thấy thợ.");
 
+      if (req.query.permanent === "true") {
+        ensure(!repo.appointments.all().some((item) => item.barberId === existing.id), 409, "Thợ đã có lịch hẹn. Hãy tạm ngừng để giữ lịch sử.");
+        for (const schedule of repo.schedules.all().filter((item) => item.barberId === existing.id)) repo.schedules.remove(schedule.id);
+        for (const block of repo.blocks.all().filter((item) => item.barberId === existing.id)) repo.blocks.remove(block.id);
+        for (const leave of repo.leaves.all().filter((item) => item.barberId === existing.id)) repo.leaves.remove(leave.id);
+        for (const rule of repo.weeklyShifts.all().filter((item) => item.barberId === existing.id)) repo.weeklyShifts.remove(rule.id);
+        repo.barbers.remove(existing.id);
+        res.status(204).end();
+        return;
+      }
+
       repo.barbers.put({ ...existing, active: false });
       res.status(204).end();
     })
   );
 
-  app.get("/api/admin/work-schedules", (_req, res) => {
-    res.json(repo.schedules.all());
+  app.get("/api/admin/work-schedules", (req, res) => {
+    const query = z.object({
+      barberId: z.string().optional(),
+      from: z.string().refine(validDate).optional(),
+      to: z.string().refine(validDate).optional()
+    }).parse(req.query);
+    const schedules = repo.schedules.all().filter((schedule) =>
+      (!query.barberId || schedule.barberId === query.barberId) &&
+      (!query.from || schedule.date >= query.from) &&
+      (!query.to || schedule.date <= query.to)
+    ).sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+    res.json(schedules.map((schedule) => {
+      const bounds = scheduleBounds(schedule);
+      return { ...schedule, activeAppointmentCount: repo.appointments.all().filter((item) =>
+        item.barberId === schedule.barberId && ["pending", "confirmed"].includes(item.status) &&
+        DateTime.fromISO(item.startAt).toMillis() >= bounds.start.toMillis() &&
+        DateTime.fromISO(item.endAt).toMillis() <= bounds.end.toMillis()
+      ).length };
+    }));
   });
+
+  function ensureAppointmentsCovered(schedules: ReturnType<Repository["schedules"]["all"]>) {
+    for (const appointment of repo.appointments.all()) {
+      if (appointment.status !== "pending" && appointment.status !== "confirmed" && appointment.status !== "in_progress") continue;
+      const start = DateTime.fromISO(appointment.startAt).toMillis();
+      const end = DateTime.fromISO(appointment.endAt).toMillis();
+      const covered = schedules.some((schedule) => {
+        if (schedule.barberId !== appointment.barberId) return false;
+        const bounds = scheduleBounds(schedule);
+        return start >= bounds.start.toMillis() && end <= bounds.end.toMillis();
+      });
+      ensure(covered, 409, "Thay đổi ca sẽ khiến lịch hẹn đang hiệu lực mất ca làm phù hợp.");
+    }
+  }
 
   function saveSchedule(
     id: string,
@@ -687,33 +966,13 @@ export function createApp(repo: Repository) {
       "Lịch làm việc bị chồng lấn."
     );
 
+    ensureAppointmentsCovered([
+      ...repo.schedules.all().filter((other) => other.id !== id),
+      schedule
+    ]);
+
     repo.schedules.put(schedule);
     return schedule;
-  }
-
-  function ensureScheduleNotBooked(id: string) {
-    const schedule = repo.schedules.get(id);
-    ensure(schedule, 404, "Không tìm thấy lịch làm việc.");
-
-    const bounds = scheduleBounds(schedule);
-
-    const hasBooking = repo.appointments.all().some(
-      (appointment) =>
-        appointment.barberId === schedule.barberId &&
-        ["pending", "confirmed"].includes(appointment.status) &&
-        overlaps(
-          bounds.start.toMillis(),
-          bounds.end.toMillis(),
-          DateTime.fromISO(appointment.startAt).toMillis(),
-          DateTime.fromISO(appointment.endAt).toMillis()
-        )
-    );
-
-    ensure(
-      !hasBooking,
-      409,
-      "Lịch làm việc đang có lịch hẹn. Xử lý lịch hẹn trước."
-    );
   }
 
   app.post(
@@ -733,8 +992,6 @@ export function createApp(repo: Repository) {
       const existing = repo.schedules.get(req.params.id);
       ensure(existing, 404, "Không tìm thấy lịch làm việc.");
 
-      ensureScheduleNotBooked(existing.id);
-
       const body = scheduleSchema.parse({
         ...existing,
         ...scheduleSchema.partial().parse(req.body)
@@ -747,11 +1004,14 @@ export function createApp(repo: Repository) {
   app.delete(
     "/api/admin/work-schedules/:id",
     wrap((req, res) => {
-      ensureScheduleNotBooked(req.params.id);
+      ensure(repo.schedules.get(req.params.id), 404, "Không tìm thấy lịch làm việc.");
+      ensureAppointmentsCovered(repo.schedules.all().filter((schedule) => schedule.id !== req.params.id));
       repo.schedules.remove(req.params.id);
       res.status(204).end();
     })
   );
+
+  registerAdminOperations(app, repo);
 
   app.use((_req, res) => {
     res.status(404).json({

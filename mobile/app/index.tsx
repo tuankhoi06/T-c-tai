@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, SafeAreaView, Alert } from "react-native";
+import { View, Text, Pressable, SafeAreaView, Alert, ImageBackground } from "react-native";
 import { api, clearToken, onUnauthorized, restoreToken, saveToken } from "../src/api";
 import { User } from "../src/types";
 import {
@@ -15,6 +15,8 @@ import {
 import { Customer } from "../src/Customer";
 import { Consultation } from "../src/Consultation";
 import { Admin } from "../src/Admin";
+import { photos } from "../src/visuals";
+import { unregisterPushToken } from "../src/push";
 
 export default function AppIndex() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -125,6 +127,7 @@ export default function AppIndex() {
 
   async function handleLogout() {
     try {
+      await unregisterPushToken();
       await api("/auth/logout", { method: "POST" });
     } catch {
       // ignore
@@ -163,10 +166,15 @@ export default function AppIndex() {
   if (!currentUser) {
     return (
       <Page>
-        <View style={{ alignItems: "center", marginTop: 14, marginBottom: 10 }}>
-          <Text style={[styles.title, { fontSize: 34 }]}>HairMatch</Text>
-          <Text style={styles.muted}>Đặt lịch làm tóc & Tư vấn phong cách AI</Text>
-        </View>
+        <ImageBackground source={photos.loginHero} resizeMode="cover" imageStyle={{ borderRadius: 26 }} style={{ minHeight: 280, borderRadius: 26, overflow: "hidden", backgroundColor: colors.card }}>
+          <View style={{ minHeight: 280, justifyContent: "space-between", padding: 22, backgroundColor: colors.photoOverlay }}>
+            <Text style={[styles.muted, { color: colors.cream, fontWeight: "700", letterSpacing: 2, fontSize: 12 }]}>HAIRMATCH  ✦  CLASSIC BARBERSHOP</Text>
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.title, { color: colors.cream, fontSize: 36, lineHeight: 40 }]}>DIỆN MẠO MỚI. PHONG CÁCH RIÊNG.</Text>
+              <Text style={[styles.text, { color: colors.text, maxWidth: 520 }]}>Nghệ thuật cắt tóc cổ điển, đặt lịch hiện đại. Bắt đầu trải nghiệm của bạn.</Text>
+            </View>
+          </View>
+        </ImageBackground>
 
         {/* Portal Switcher (Customer vs Admin) */}
         <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>

@@ -33,8 +33,9 @@ export async function verifyPassword(
 }
 
 export function publicUser(user: User): PublicUser {
-  const { passwordHash, ...safe } = user;
-  return safe;
+  return { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role,
+    tier: user.tier, birthday: user.birthday, loyaltyPoints: user.loyaltyPoints || 0,
+    hairHistory: user.hairHistory?.map(({ id, date, style, color, note }) => ({ id, date, style, color, note })) };
 }
 
 export function createToken(): string {

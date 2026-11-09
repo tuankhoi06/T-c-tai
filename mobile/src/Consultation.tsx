@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Image, Switch, Alert } from "react-native";
+import { View, Text, Image, ImageBackground, Switch, Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { api } from "./api";
 import { ConsultationResult } from "./types";
@@ -12,6 +12,7 @@ import {
   styles,
   colors
 } from "./ui";
+import { photos } from "./visuals";
 
 interface ConsultationProps {
   onBookWithHaircut?: (haircutName: string, barberNote: string, suggestedService?: string) => void;
@@ -19,6 +20,7 @@ interface ConsultationProps {
 
 export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(false);
@@ -39,6 +41,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
       aspect: [1, 1]
     });
     if (!res.canceled && res.assets && res.assets.length > 0) {
+      setImageAsset(res.assets[0]);
       setImageUri(res.assets[0].uri);
       setResult(null);
     }
@@ -57,6 +60,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
       aspect: [1, 1]
     });
     if (!res.canceled && res.assets && res.assets.length > 0) {
+      setImageAsset(res.assets[0]);
       setImageUri(res.assets[0].uri);
       setResult(null);
     }
@@ -81,15 +85,26 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
       formData.append("consent", "true");
       formData.append("preferences", JSON.stringify({}));
 
-      const uriParts = imageUri.split(".");
-      const fileType = uriParts[uriParts.length - 1];
+      const mimeType = imageAsset?.mimeType || imageAsset?.file?.type || "image/jpeg";
+      const extension = mimeType === "image/png" ? "png" : "jpg";
+      const fileName = imageAsset?.file?.name || imageAsset?.fileName || `photo.${extension}`;
 
-      // Format for react-native FormData file upload
-      formData.append("image", {
-        uri: imageUri,
-        name: `photo.${fileType || "jpg"}`,
-        type: `image/${fileType === "png" ? "png" : "jpeg"}`
-      } as any);
+      if (Platform.OS === "web") {
+        // On web FormData needs a real Blob/File. The { uri, name, type } shape
+        // is only understood by React Native's native networking layer.
+        const imageFile = imageAsset?.file ?? await fetch(imageUri).then((response) => {
+          if (!response.ok) throw new Error("Không đọc được ảnh đã chọn. Vui lòng chọn lại ảnh.");
+          return response.blob();
+        });
+        if (!imageFile) throw new Error("Không đọc được ảnh đã chọn. Vui lòng chọn lại ảnh.");
+        formData.append("image", imageFile, fileName);
+      } else {
+        formData.append("image", {
+          uri: imageUri,
+          name: fileName,
+          type: mimeType
+        } as any);
+      }
 
       const res = await api<ConsultationResult>("/ai/consultations", {
         method: "POST",
@@ -116,7 +131,12 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
 
   return (
     <Page>
-      <Text style={styles.title}>AI Tư vấn kiểu tóc</Text>
+      <ImageBackground source={photos.detail} resizeMode="cover" imageStyle={{ borderRadius: 22 }} style={{ minHeight: 195, borderRadius: 22, overflow: "hidden", justifyContent: "flex-end" }}>
+        <View style={{ padding: 19, paddingTop: 75, backgroundColor: colors.photoOverlay }}>
+          <Text style={[styles.muted, { color: colors.cream, fontSize: 11, letterSpacing: 2, fontWeight: "700" }]}>THE STYLE STUDIO</Text>
+          <Text style={[styles.title, { color: colors.cream, fontSize: 30 }]}>AI Tư vấn kiểu tóc</Text>
+        </View>
+      </ImageBackground>
       <Text style={styles.muted}>
         Chỉ cần chụp hoặc tải ảnh khuôn mặt trực diện rõ nét. AI Vision sẽ tự nhìn tỷ lệ khuôn mặt và mái tóc hiện tại để gợi ý 3 kiểu tóc phù hợp nhất.
       </Text>
@@ -133,7 +153,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                 width: 200,
                 height: 200,
                 borderRadius: 16,
-                backgroundColor: "#222",
+                backgroundColor: colors.dark,
                 borderWidth: 2,
                 borderColor: colors.gold
               }}
@@ -156,7 +176,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
               <Switch
                 value={consent}
                 onValueChange={setConsent}
-                trackColor={{ true: colors.gold, false: "#444" }}
+                trackColor={{ true: colors.gold, false: colors.border }}
               />
               <Text style={[styles.muted, { flex: 1, fontSize: 13 }]}>
                 Đồng ý để AI phân tích dáng mặt và tóc trực tiếp từ ảnh.
@@ -179,11 +199,11 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                 width: 72,
                 height: 72,
                 borderRadius: 36,
-                backgroundColor: "#222",
+                backgroundColor: colors.dark,
                 alignItems: "center",
                 justifyContent: "center",
                 borderWidth: 1,
-                borderColor: "#333"
+                borderColor: colors.border
               }}
             >
               <Text style={{ fontSize: 32 }}>📸</Text>
@@ -212,13 +232,13 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
             <Text style={styles.title}>Kết quả tư vấn</Text>
             <View
               style={{
-                backgroundColor: result.mode === "live" ? "#166534" : "#854d0e",
+                backgroundColor: result.mode === "live" ? colors.statusCompleted : colors.statusPending,
                 paddingHorizontal: 8,
                 paddingVertical: 4,
                 borderRadius: 6
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: colors.dark, fontSize: 12, fontWeight: "700" }}>
                 Mode: {result.mode.toUpperCase()}
               </Text>
             </View>
@@ -255,7 +275,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                       {idx + 1}. {rec.name}
                     </Text>
                     {rec.direction && (
-                      <View style={{ backgroundColor: "#262626", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                      <View style={{ backgroundColor: colors.dark, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
                         <Text style={{ color: colors.gold, fontSize: 11, fontWeight: "600" }}>{rec.direction}</Text>
                       </View>
                     )}
@@ -264,7 +284,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                   <Text style={styles.muted}>Độ dài: {rec.length}</Text>
                   <Text style={styles.muted}>Mức chăm sóc: {rec.maintenance}</Text>
                   {rec.feasibility && (
-                    <Text style={[styles.text, { color: rec.feasibility.includes("Cần nuôi") ? "#fbbf24" : "#4ade80", fontSize: 13 }]}>
+                    <Text style={[styles.text, { color: rec.feasibility.includes("Cần nuôi") ? colors.statusPending : colors.success, fontSize: 13 }]}>
                       📌 {rec.feasibility}
                     </Text>
                   )}
@@ -278,7 +298,7 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
                       💈 Dịch vụ tiệm: {rec.suggestedService}
                     </Text>
                   )}
-                  <View style={{ backgroundColor: "#262626", padding: 10, borderRadius: 8, marginTop: 4 }}>
+                  <View style={{ backgroundColor: colors.dark, padding: 10, borderRadius: 8, marginTop: 4 }}>
                     <Text style={[styles.muted, { fontSize: 13, color: colors.gold }]}>
                       Lưu ý cho thợ: {rec.barberNote}
                     </Text>

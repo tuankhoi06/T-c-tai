@@ -100,7 +100,14 @@ describe("Booking", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("Khách chỉ được hủy lịch trong 1 ngày khi còn chờ duyệt, không được hủy khi đã được admin duyệt", async () => {
+  it("Chỉ hiện slot trong cửa sổ đặt trước 14 ngày", async () => {
+    const repo = new MemoryRepository(); await repo.seed();
+    const booking = new BookingService(repo);
+    const tooFar = DateTime.now().setZone(SHOP_ZONE).plus({ days: 15 }).toISODate()!;
+    expect(() => booking.availability("barber-1", "cut", tooFar)).toThrowError(expect.objectContaining({ status: 400 }));
+  });
+
+  it("Khách hủy lịch chờ hoặc đã xác nhận trước 2 giờ, kèm lý do", async () => {
     const repo = new MemoryRepository();
     await repo.seed();
     const booking = new BookingService(repo);
@@ -115,32 +122,31 @@ describe("Booking", () => {
       serviceId: "cut",
       startAt: slots[0]
     });
-    const cancelled = booking.cancel(customer, appt.id);
+    const cancelled = booking.cancel(customer, appt.id, "Đổi kế hoạch");
     expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.cancelReason).toBe("Đổi kế hoạch");
 
-    // 2. Lịch đã được admin duyệt sang confirmed -> Không được phép hủy
+    // 2. Lịch đã được admin duyệt vẫn được hủy trước 2 giờ.
     const appt2 = await booking.create(customer, {
       barberId: "barber-1",
       serviceId: "cut",
       startAt: slots[1]
     });
     booking.changeStatus(appt2.id, "confirmed");
-    expect(() => booking.cancel(customer, appt2.id)).toThrowError(
-      expect.objectContaining({ status: 409 })
-    );
+    expect(booking.cancel(customer, appt2.id, "Đổi kế hoạch").status).toBe("cancelled");
 
-    // 3. Lịch đã quá 24h kể từ khi tạo -> Không được phép hủy
+    // 3. Lịch còn dưới 2 giờ thì không được tự hủy.
     const appt3 = await booking.create(customer, {
       barberId: "barber-1",
       serviceId: "cut",
       startAt: slots[2]
     });
-    // Giả lập lịch tạo từ 2 ngày trước
+    // Giả lập giờ hẹn sắp tới.
     const oldAppt = repo.appointments.get(appt3.id)!;
-    oldAppt.createdAt = DateTime.now().minus({ days: 2 }).toISO()!;
+    oldAppt.startAt = DateTime.now().plus({ minutes: 60 }).toISO()!;
     repo.appointments.put(oldAppt);
 
-    expect(() => booking.cancel(customer, appt3.id)).toThrowError(
+    expect(() => booking.cancel(customer, appt3.id, "Đổi kế hoạch")).toThrowError(
       expect.objectContaining({ status: 409 })
     );
   });
