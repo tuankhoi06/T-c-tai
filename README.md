@@ -9,7 +9,7 @@
 
 - **Frontend Mobile**: React Native (Expo SDK 52), Expo Router, TypeScript, Expo ImagePicker, Expo SecureStore. Hỗ trợ chạy trên **iOS**, **Android** và **Web**.
 - **Backend API**: Node.js, Express, TypeScript, Zod Schema Validation, Sharp Image Processing, Mutex Concurrency Control (`async-mutex`), Rate Limiting, Helmet Security Headers.
-- **Tầng dữ liệu (In-Memory Repository)**: Thiết kế theo mẫu Repository Pattern (`backend/src/repository.ts`), cho phép cắm Database thật (PostgreSQL / MongoDB) ở giai đoạn sau mà không làm thay đổi tầng nghiệp vụ.
+- **Tầng dữ liệu**: Backend dùng Supabase PostgreSQL khi có `SUPABASE_URL` và `SUPABASE_SECRET_KEY`; nếu chưa cấu hình, app dùng in-memory repository để chạy demo. Schema được quản lý bằng migration trong `supabase/migrations/`.
 - **AI Tư vấn kiểu tóc**: Tích hợp OpenAI Responses API (Structured Outputs) hỗ trợ 2 chế độ:
   - `mock`: Dữ liệu minh họa an toàn, dùng để test & demo không tốn chi phí.
   - `live`: Gọi trực tiếp model đa phương thức (GPT-4o / GPT-4o-mini) phân tích ảnh trực diện và trả về kết quả chuẩn theo schema.
@@ -39,7 +39,7 @@ hairmatch/
 │   ├── app.json                        # Cấu hình Expo
 │   ├── package.json
 │   └── tsconfig.json
-└── backend/                            # Máy chủ REST API Express TypeScript
+├── backend/                            # Máy chủ REST API Express TypeScript
     ├── src/
     │   ├── server.ts                   # Điểm khởi chạy server (port 4000)
     │   ├── app.ts                      # Cấu hình Express app, Middleware & Routes
@@ -55,6 +55,9 @@ hairmatch/
     │       └── security_and_ai.test.ts # Test phân quyền & xử lý lỗi AI / Validation
     ├── package.json
     └── tsconfig.json
+└── supabase/
+    ├── config.toml                     # Cấu hình Supabase CLI và project ref
+    └── migrations/                     # Schema HairMatch và bảo vệ RLS
 ```
 
 ---
@@ -193,8 +196,8 @@ Kiểm tra hiện tại: `npm test` chạy bộ test backend, `npm run typecheck
 
 ## 7. Giới hạn phiên bản MVP & Hướng mở rộng
 
-- **Lưu trữ in-memory**: Bản demo lưu dữ liệu trong bộ nhớ để chấm bài nhanh không cần cài PostgreSQL/MySQL. Khi server khởi động lại, dữ liệu quay về trạng thái seed ban đầu.
-- **Tích hợp Database giai đoạn 2**: Đã chuẩn bị sẵn interface `Repository` (`backend/src/repository.ts`) để cắm Prisma/TypeORM/Mongoose mà không cần sửa đổi các controllers và services.
+- **Supabase**: Mỗi Supabase project đã có PostgreSQL; chạy `npx supabase login`, `npx supabase link --project-ref yyvzakjgcxjbneibpcly`, rồi `npx supabase db push --remote` để tạo các bảng HairMatch. Cấu hình `SUPABASE_URL` và `SUPABASE_SECRET_KEY` trong `backend/.env`; secret key chỉ dùng ở backend. Nếu để trống, server tiếp tục dùng in-memory repository.
+- **Bảo mật database**: Migration bật Row Level Security và thu hồi quyền của `anon`/`authenticated`; chỉ backend dùng server secret key truy cập các bảng HairMatch.
 - **Chưa có cổng thanh toán trực tuyến**: Admin ghi nhận số tiền thực thu và phương thức tiền mặt/chuyển khoản/thẻ sau khi phục vụ; ứng dụng chưa tự đối soát giao dịch.
 - **Khách thanh toán tại salon**: Màn xác nhận chưa cho chọn thanh toán trước vì chưa tích hợp cổng thanh toán. Đăng nhập OTP cần nhà cung cấp SMS; bản demo hiện dùng mật khẩu. Zalo/Messenger cần tài khoản chính thức của salon, còn nhắn tin trong app đã hoạt động.
 - **Push trên thiết bị thật**: Cần EAS project ID (`EXPO_PUBLIC_EAS_PROJECT_ID` trong `mobile/.env`) và thông tin ký/push credentials của Android/iOS. Web chỉ dùng hộp thông báo trong ứng dụng. Dịch vụ Expo nhận push không đồng nghĩa thiết bị đã hiển thị thành công; bản MVP chưa kiểm tra push receipts.

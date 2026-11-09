@@ -71,11 +71,16 @@ export async function sendPush(repo: Repository, notices: Notification[]): Promi
       // Thông báo trong app vẫn được giữ khi dịch vụ push tạm thời không truy cập được.
     }
   }
+  await repo.flush?.();
   return { attempted: messages.length, accepted };
 }
 
 export function startReminderWorker(repo: Repository) {
-  const tick = () => { const due = createDueReminders(repo); if (due.length) void sendPush(repo, due); };
+  const tick = () => {
+    const due = createDueReminders(repo);
+    if (due.length) void sendPush(repo, due);
+    void repo.flush?.().catch(() => console.error("Supabase reminder persistence failed."));
+  };
   tick();
   const timer = setInterval(tick, 60000);
   timer.unref();

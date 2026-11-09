@@ -20,6 +20,8 @@ import type {
 } from "./models.js";
 
 export interface Repository {
+  readonly storageType?: "in-memory" | "supabase";
+  flush?(): Promise<void>;
   users: {
     all(): User[];
     get(id: string): User | undefined;
@@ -88,6 +90,7 @@ function collection<T extends { id: string }>() {
 }
 
 export class MemoryRepository implements Repository {
+  readonly storageType: "in-memory" | "supabase" = "in-memory";
   private userCollection = collection<User>();
 
   users = {

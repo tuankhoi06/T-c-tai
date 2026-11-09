@@ -112,10 +112,45 @@ export function createApp(repo: Repository) {
 
   app.use(express.json({ limit: "400kb" }));
 
+  if (repo.flush) {
+    app.use((_req, res, next) => {
+      const sendJson = res.json.bind(res);
+      const endResponse = res.end.bind(res);
+      const restoreResponseMethods = () => {
+        res.json = sendJson;
+        res.end = endResponse;
+      };
+
+      res.json = ((body: unknown) => {
+        void repo.flush!().then(() => {
+          restoreResponseMethods();
+          sendJson(body);
+        }).catch((error) => {
+          restoreResponseMethods();
+          next(error);
+        });
+        return res;
+      }) as Response["json"];
+
+      res.end = ((...args: unknown[]) => {
+        void repo.flush!().then(() => {
+          restoreResponseMethods();
+          (endResponse as (...values: unknown[]) => Response)(...args);
+        }).catch((error) => {
+          restoreResponseMethods();
+          next(error);
+        });
+        return res;
+      }) as Response["end"];
+
+      next();
+    });
+  }
+
   app.get("/api/health", (_req, res) => {
     res.json({
       ok: true,
-      storage: "in-memory",
+      storage: repo.storageType || "in-memory",
       aiMode: config.AI_MODE
     });
   });

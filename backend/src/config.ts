@@ -7,7 +7,17 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().default(""),
   GEMINI_API_KEY: z.string().default(""),
   AI_MODEL: z.string().default(""),
-  CORS_ORIGINS: z.string().default("")
+  CORS_ORIGINS: z.string().default(""),
+  SUPABASE_URL: z.union([z.literal(""), z.string().url()]).default(""),
+  SUPABASE_SECRET_KEY: z.string().default("")
+}).superRefine((value, context) => {
+  if (Boolean(value.SUPABASE_URL) !== Boolean(value.SUPABASE_SECRET_KEY)) {
+    context.addIssue({
+      code: "custom",
+      path: ["SUPABASE_SECRET_KEY"],
+      message: "SUPABASE_URL and SUPABASE_SECRET_KEY must both be configured."
+    });
+  }
 });
 
 export const config = schema.parse(process.env);
