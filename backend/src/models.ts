@@ -1,4 +1,4 @@
-export type Role = "customer" | "admin";
+export type Role = "customer" | "admin" | "barber";
 
 export type AppointmentStatus =
   | "pending"
@@ -22,19 +22,21 @@ export interface HairRecord {
 export interface User {
   id: string;
   name: string;
+  username?: string;
   phone?: string;
   email?: string;
   passwordHash: string;
   role: Role;
-  tier?: "silver" | "gold" | "vip";
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: HairRecord[];
   birthday?: string;
   loyaltyPoints?: number;
+  barberId?: string;
+  noShowCount?: number;
 }
 
-export type PublicUser = Omit<User, "passwordHash">;
+export type PublicUser = Omit<User, "passwordHash" | "email">;
 
 export interface HairService {
   id: string;
@@ -91,12 +93,19 @@ export interface Appointment {
   discountAmount?: number;
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
+  paymentConfirmedAt?: string;
+  paymentConfirmedBy?: string;
+  commissionRateSnapshot?: number;
+  commissionAmount?: number;
   startedAt?: string;
   rating?: number;
   review?: string;
   note?: string;
   styleName?: string;
   paymentChoice?: "salon" | "prepay";
+  depositRequired?: number;
+  simulatedPaid?: number;
+  simulatedPaymentReference?: string;
   reviewPhoto?: string;
   portfolioConsent?: boolean;
   aiHaircutName?: string;
@@ -171,12 +180,39 @@ export interface PushDevice {
   token: string;
 }
 
+export interface SupportThreadEntry {
+  id: string;
+  senderId: string;
+  senderRole: Role;
+  body: string;
+  createdAt: string;
+}
+
 export interface SupportMessage {
   id: string;
-  customerId: string;
+  customerId?: string;
+  contactId?: string;
+  contactRole?: Role;
+  senderId?: string;
+  senderRole?: Role;
   body: string;
   createdAt: string;
   reply?: string;
   repliedAt?: string;
+  updatedAt?: string;
+  participantIds?: string[];
+  readBy?: string[];
+  appointmentId?: string;
+  leaveRequestId?: string;
+  leaveRequestStatus?: LeaveRequest["status"];
+  leaveFrom?: string;
+  leaveTo?: string;
+  leaveReason?: string;
+  messages?: SupportThreadEntry[];
+}
+
+export interface AdminSettings {
+  id: "global";
+  autoCancelUnconfirmed: boolean;
 }
 

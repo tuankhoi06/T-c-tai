@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
 import { SHOP_ZONE } from "./config.js";
+import { BookingService } from "./booking.js";
 import type { Notification } from "./models.js";
 import type { Repository } from "./repository.js";
 
@@ -76,13 +77,40 @@ export async function sendPush(repo: Repository, notices: Notification[]): Promi
 }
 
 export function startReminderWorker(repo: Repository) {
-  const tick = () => {
+  const booking = new BookingService(repo);
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+    const autoCancel = repo.adminSettings.get("global")?.autoCancelUnconfirmed ?? true;
+    const cancelledNotices: Notification[] = [];
+    if (autoCancel) {
+      const now = DateTime.now();
+      for (const appointment of repo.appointments.all()) {
+        const endAt = DateTime.fromISO(appointment.endAt);
+        if (appointment.status !== "pending" || !endAt.isValid || endAt > now) continue;
+        try {
+          const existingNoticeIds = new Set(repo.notifications.all().map((item) => item.id));
+          const cancelled = booking.changeStatus(appointment.id, "cancelled", "Tự động hủy: đã quá giờ hẹn nhưng admin chưa xác nhận.");
+          cancelledNotices.push(...repo.notifications.all().filter((item) => item.appointmentId === cancelled.id && item.kind === "booking" && !existingNoticeIds.has(item.id)));
+        } catch {
+          // Skip stale/invalid appointments; retry on the next worker tick.
+        }
+      }
+    }
     const due = createDueReminders(repo);
-    if (due.length) void sendPush(repo, due);
-    void repo.flush?.().catch(() => console.error("Supabase reminder persistence failed."));
+    const notices = [...due, ...cancelledNotices];
+    if (notices.length) await sendPush(repo, notices);
+    await repo.flush?.();
+    } catch {
+      console.error("Reminder or automatic cancellation worker failed.");
+    } finally {
+      running = false;
+    }
   };
-  tick();
-  const timer = setInterval(tick, 60000);
+  void tick();
+  const timer = setInterval(() => void tick(), 60000);
   timer.unref();
   return () => clearInterval(timer);
 }

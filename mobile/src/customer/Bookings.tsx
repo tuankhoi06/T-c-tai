@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Linking, Pressable, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { api } from "../api";
 import type { Appointment } from "../types";
-import { Button, Card, ErrorText, Field, Loading, colors, dateTimeLabel, money, shopDate, statusLabel, styles, timeLabel } from "../ui";
+import { Button, Card, DragScrollView, ErrorText, Field, Loading, colors, dateTimeLabel, money, shopDate, statusLabel, styles, timeLabel } from "../ui";
 import { Choice, FormModal } from "../admin/components";
 import type { BookingPreset } from "./Booking";
 import { salonMapsUrl } from "./salon";
@@ -27,6 +27,7 @@ export function CustomerBookings({ appointments, onChanged, onRebook }: {
   const [photo, setPhoto] = useState("");
   const [portfolioConsent, setPortfolioConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -78,16 +79,29 @@ export function CustomerBookings({ appointments, onChanged, onRebook }: {
     } catch (err: any) { setError(err.message || "Không gửi được đánh giá."); }
     finally { setBusy(false); }
   }
+  async function refreshAppointments() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await onChanged(); }
+    finally { setRefreshing(false); }
+  }
   const items = appointments.filter((item) => tab === "upcoming" ? ["pending", "confirmed", "in_progress"].includes(item.status) : ["completed", "cancelled", "no_show"].includes(item.status));
   return <View style={{ gap: 12 }}>
     <Text style={styles.subtitle}>Lịch của tôi</Text>
-    <Choice value={tab} onChange={(value) => setTab(value as typeof tab)} options={[{ label: "Sắp tới", value: "upcoming" }, { label: "Lịch sử", value: "history" }]} />
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <View style={{ flex: 1 }}><Choice value={tab} onChange={(value) => setTab(value as typeof tab)} options={[{ label: "Sắp tới", value: "upcoming" }, { label: "Lịch sử", value: "history" }]} /></View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Tải lại lịch" disabled={refreshing} onPress={() => void refreshAppointments()} style={[styles.button, styles.buttonSecondary, { width: 44, height: 44, minHeight: 44, padding: 0, borderRadius: 11, opacity: refreshing ? 0.55 : 1 }]}>
+        <Text style={[styles.text, { fontSize: 24, lineHeight: 28, color: colors.gold }]}>{refreshing ? "⟳" : "↻"}</Text>
+      </Pressable>
+    </View>
     <ErrorText message={error} />
     {!items.length && <Card><Text style={styles.muted}>{tab === "upcoming" ? "Chưa có lịch sắp tới." : "Chưa có lịch sử phục vụ."}</Text></Card>}
     {items.map((item) => <Card key={item.id} style={{ gap: 7 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}><Text style={[styles.text, { fontWeight: "700", flex: 1 }]}>{item.serviceNameSnapshot}</Text><Text style={{ color: colors.gold }}>{statusLabel[item.status]}</Text></View>
       <Text style={styles.text}>{dateTimeLabel(item.startAt)} · {item.durationSnapshot} phút</Text>
       <Text style={styles.muted}>Thợ {item.barberNameSnapshot} · {money(item.priceSnapshot)}</Text>
+      {item.paymentChoice === "prepay" && <Text style={styles.muted}>Thanh toán mô phỏng: {item.simulatedPaid ? `Đã ghi nhận ${money(item.simulatedPaid)} · ${item.simulatedPaymentReference}` : `Chưa thanh toán ${money(item.depositRequired || item.priceSnapshot)}`}</Text>}
+      {tab === "upcoming" && item.paymentChoice === "prepay" && !item.simulatedPaid && <Button title={`Mô phỏng thanh toán ${money(item.depositRequired || item.priceSnapshot)}`} disabled={busy} onPress={() => { setBusy(true); void api(`/appointments/${item.id}/simulate-payment`, { method: "POST" }).then(onChanged).catch((err) => setError(err.message || "Không ghi nhận được thanh toán.")).finally(() => setBusy(false)); }} />}
       {tab === "upcoming" && <><Text style={[styles.muted, { fontFamily: "monospace" }]}>Mã nhận lịch tại quầy: {item.id.slice(0, 8).toUpperCase()}</Text>
         <View style={styles.row}>{!!salonMapsUrl && <Button title="Chỉ đường" secondary onPress={() => void Linking.openURL(salonMapsUrl)} />}
           {canChange(item) && <><Button title="Đổi giờ" secondary onPress={() => { setError(""); setMoveOffset(0); setMoveItem(item); }} /><Button title="Hủy lịch" secondary onPress={() => { setError(""); setCancelItem(item); }} /></>}
@@ -101,7 +115,6 @@ export function CustomerBookings({ appointments, onChanged, onRebook }: {
       {item.rating && <Text style={styles.muted}>★ {item.rating}/5 {item.review || ""}</Text>}
       {!!item.reviewPhoto && <Image source={{ uri: item.reviewPhoto }} style={{ width: 96, height: 96, borderRadius: 9 }} />}
     </Card>)}
-    <Button title="Tải lại lịch" secondary onPress={() => void onChanged()} />
     <FormModal visible={!!cancelItem} title="Hủy lịch hẹn" onClose={() => { if (!busy) setCancelItem(null); }}>
       <Text style={styles.muted}>Chỉ được hủy trước giờ hẹn ít nhất 2 tiếng. Mã ưu đãi sẽ được hoàn lượt dùng.</Text><ErrorText message={error} />
       <Field label="Lý do hủy" value={reason} onChange={setReason} multiline />
@@ -109,7 +122,7 @@ export function CustomerBookings({ appointments, onChanged, onRebook }: {
     </FormModal>
     <FormModal visible={!!moveItem} title="Đổi giờ hẹn" onClose={() => { if (!busy) setMoveItem(null); }}>
       <Text style={styles.muted}>Giữ nguyên thợ và dịch vụ. Chọn giờ trống trong 14 ngày tới.</Text><ErrorText message={error} />
-      <ScrollView horizontal contentContainerStyle={{ gap: 5 }}>{Array.from({ length: 14 }, (_, n) => <Button key={n} title={shopDate(n).slice(5)} secondary={n !== moveOffset} onPress={() => setMoveOffset(n)} />)}</ScrollView>
+      <DragScrollView horizontal contentContainerStyle={{ gap: 5 }}>{Array.from({ length: 14 }, (_, n) => <Button key={n} title={shopDate(n).slice(5)} secondary={n !== moveOffset} onPress={() => setMoveOffset(n)} />)}</DragScrollView>
       {loadingSlots ? <Loading /> : <View style={styles.row}>{moveSlots.map((value) => <Button key={value} title={timeLabel(value)} secondary={moveSlot !== value} onPress={() => setMoveSlot(value)} />)}</View>}
       {!loadingSlots && !moveSlots.length && <Text style={styles.muted}>Không còn giờ phù hợp ngày này.</Text>}
       <Button title={busy ? "Đang lưu..." : "Lưu giờ mới"} disabled={busy || !moveSlot} onPress={() => void reschedule()} />

@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -99,6 +100,7 @@ export const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: colors.gold,
+    minHeight: 48,
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 11,
@@ -140,10 +142,64 @@ export function Page({ children }: { children: ReactNode }) {
       style={styles.page}
       contentContainerStyle={{ alignItems: "center", paddingVertical: 14, paddingBottom: 28 }}
       keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
     >
       <View style={{ width: Math.max(0, Math.min(width - 32, 1024)), gap: 14 }}>{children}</View>
     </ScrollView>
   );
+}
+
+const NativeScrollView = ScrollView as any;
+export function DragScrollView(props: ComponentProps<typeof ScrollView>) {
+  const drag = useRef<{ pointerId: number; startX: number; startScroll: number; target: any } | null>(null);
+  const moved = useRef(false);
+  function pointerDown(event: any) {
+    if (Platform.OS !== "web" || event.pointerType !== "mouse" || event.button !== 0) return;
+    const target = event.currentTarget;
+    if (!target || target.scrollWidth <= target.clientWidth) return;
+    drag.current = { pointerId: event.pointerId, startX: event.clientX, startScroll: target.scrollLeft, target };
+    moved.current = false;
+    target.style.cursor = "grabbing";
+    target.style.userSelect = "none";
+  }
+  function pointerMove(event: any) {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    const delta = event.clientX - drag.current.startX;
+    if (Math.abs(delta) > 4 && !moved.current) {
+      moved.current = true;
+      drag.current.target.setPointerCapture?.(event.pointerId);
+    }
+    if (moved.current) {
+      event.preventDefault?.();
+      drag.current.target.scrollLeft = drag.current.startScroll - delta;
+    }
+  }
+  function pointerUp(event: any) {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    const { target, pointerId } = drag.current;
+    target.style.cursor = "grab";
+    target.style.userSelect = "";
+    if (target.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
+    drag.current = null;
+  }
+  function clickCapture(event: any) {
+    if (!moved.current) return;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    moved.current = false;
+  }
+  return <NativeScrollView
+    {...props}
+    nestedScrollEnabled
+    directionalLockEnabled
+    keyboardShouldPersistTaps="handled"
+    style={[props.style, Platform.OS === "web" ? ({ cursor: "grab" } as any) : null]}
+    onPointerDown={pointerDown}
+    onPointerMove={pointerMove}
+    onPointerUp={pointerUp}
+    onPointerCancel={pointerUp}
+    onClickCapture={clickCapture}
+  />;
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: any }) {
@@ -241,6 +297,59 @@ export function Field({
       />
     </View>
   );
+}
+
+export function ComboBox({ label, value, options, onChange, disabled = false, searchable = false, searchPlaceholder = "Tìm kiếm" }: {
+  label: string;
+  value: string;
+  options: { label: string; value: string; searchText?: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const selected = options.find((option) => option.value === value);
+  const visibleOptions = searchable && query.trim()
+    ? options.filter((option) => `${option.label} ${option.searchText || ""}`.toLocaleLowerCase("vi-VN").includes(query.trim().toLocaleLowerCase("vi-VN")))
+    : options;
+  const pageSize = 8;
+  const pageOptions = visibleOptions.slice(0, page * pageSize);
+  return <>
+    <View style={{ gap: 6 }}>
+      <Text style={styles.muted}>{label}</Text>
+      <Pressable accessibilityRole="button" disabled={disabled} onPress={() => { setQuery(""); setPage(1); setOpen(true); }} style={[styles.input, { flexDirection: "row", alignItems: "center", justifyContent: "space-between", opacity: disabled ? 0.5 : 1 }]}>
+        <Text style={[styles.text, { flex: 1, textAlignVertical: "center" }]} numberOfLines={1}>{selected?.label || "Chọn mục"}</Text>
+        <View style={{ width: 26, height: 24, marginLeft: 10, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: colors.gold, fontSize: 13, lineHeight: 16, textAlign: "center", includeFontPadding: false }}>▾</Text>
+        </View>
+      </Pressable>
+    </View>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 16 }}>
+        <View style={{ width: "100%", maxWidth: 520, height: 540, maxHeight: "78%", alignSelf: "center" }}>
+          <View style={[styles.card, { padding: 12, flex: 1 }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={styles.subtitle}>{label}</Text>
+              <Pressable accessibilityRole="button" hitSlop={4} onPress={() => { setOpen(false); setQuery(""); setPage(1); }} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.gold, fontWeight: "700", padding: 8 }}>Đóng</Text></Pressable>
+            </View>
+            {searchable && <TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder={searchPlaceholder} placeholderTextColor={colors.muted} autoCapitalize="none" style={[styles.input, { marginBottom: 8 }]} />}
+            <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled showsVerticalScrollIndicator>
+              {pageOptions.map((option) => <Pressable key={option.value} onPress={() => { onChange(option.value); setOpen(false); setQuery(""); setPage(1); }} style={{ minHeight: 46, justifyContent: "center", paddingHorizontal: 12, borderRadius: 9, backgroundColor: option.value === value ? colors.gold : "transparent", marginBottom: 4 }}>
+                <Text style={[styles.text, option.value === value && { color: colors.dark, fontWeight: "700" }]}>{option.label}</Text>
+              </Pressable>)}
+              {visibleOptions.length === 0 && <Text style={[styles.muted, { padding: 12 }]}>Không tìm thấy khách phù hợp.</Text>}
+            </ScrollView>
+            {pageOptions.length < visibleOptions.length && <Pressable accessibilityRole="button" onPress={() => setPage((current) => current + 1)} style={[styles.button, styles.buttonSecondary, { marginTop: 8 }]}>
+              <Text style={[styles.buttonText, { color: colors.text }]}>Xem thêm {Math.min(pageSize, visibleOptions.length - pageOptions.length)} khách ↓</Text>
+            </Pressable>}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </>;
 }
 
 export function Loading() {

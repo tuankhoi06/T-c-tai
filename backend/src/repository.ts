@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
 import { SHOP_ZONE } from "./config.js";
-import { hashPassword } from "./security.js";
+import { hashPassword, normalizePhone } from "./security.js";
+import { demoCustomerAccounts, demoCustomerPassword } from "./demo-customer-accounts.js";
 
 import type {
   Appointment,
@@ -16,7 +17,8 @@ import type {
   Voucher,
   Notification,
   PushDevice,
-  SupportMessage
+  SupportMessage,
+  AdminSettings
 } from "./models.js";
 
 export interface Repository {
@@ -26,8 +28,6 @@ export interface Repository {
     all(): User[];
     get(id: string): User | undefined;
     byPhone(phone: string): User | undefined;
-    byEmail(email: string): User | undefined;
-    byPhoneOrEmail(identifier: string): User | undefined;
     put(user: User): void;
     remove(id: string): void;
   };
@@ -66,6 +66,7 @@ export interface Repository {
   notifications: ReturnType<typeof collection<Notification>>;
   pushDevices: ReturnType<typeof collection<PushDevice>>;
   supportMessages: ReturnType<typeof collection<SupportMessage>>;
+  adminSettings: ReturnType<typeof collection<AdminSettings>>;
 
   sessions: {
     get(token: string): Session | undefined;
@@ -96,15 +97,7 @@ export class MemoryRepository implements Repository {
   users = {
     ...this.userCollection,
     byPhone: (phone: string) =>
-      this.userCollection.all().find((user) => user.phone === phone),
-    byEmail: (email: string) =>
-      this.userCollection.all().find((user) => user.email && user.email.toLowerCase() === email.toLowerCase()),
-    byPhoneOrEmail: (identifier: string) => {
-      const clean = identifier.trim().toLowerCase();
-      return this.userCollection.all().find(
-        (user) => user.phone === clean || (user.email && user.email.toLowerCase() === clean)
-      );
-    }
+      this.userCollection.all().find((user) => user.phone && normalizePhone(user.phone) === normalizePhone(phone)),
   };
 
   services = collection<HairService>();
@@ -118,6 +111,7 @@ export class MemoryRepository implements Repository {
   notifications = collection<Notification>();
   pushDevices = collection<PushDevice>();
   supportMessages = collection<SupportMessage>();
+  adminSettings = collection<AdminSettings>();
 
   private sessionMap = new Map<string, Session>();
 
@@ -136,7 +130,6 @@ export class MemoryRepository implements Repository {
       id: "admin-demo",
       name: "Chủ tiệm HairMatch",
       phone: "0900000000",
-      email: "admin@hairmatch.vn",
       passwordHash: await hashPassword("Admin123!"),
       role: "admin"
     };
@@ -145,22 +138,26 @@ export class MemoryRepository implements Repository {
       id: "customer-demo",
       name: "Khách hàng demo",
       phone: "0911111111",
-      email: "customer@hairmatch.vn",
       passwordHash: await hashPassword("Customer123!"),
       role: "customer",
-      tier: "silver",
       blacklisted: false,
       hairHistory: []
+    };
+    const barberAccount: User = {
+      id: "barber-account-demo",
+      name: "Duy",
+      phone: "0900000204",
+      passwordHash: await hashPassword("Barber123!"),
+      role: "barber",
+      barberId: "barber-4"
     };
     const sampleCustomers: User[] = [
       {
         id: "customer-lan",
         name: "Lan Anh",
         phone: "0922222222",
-        email: "lan.anh@hairmatch.vn",
         passwordHash: await hashPassword("Customer123!"),
         role: "customer",
-        tier: "gold",
         loyaltyPoints: 320,
         blacklisted: false,
         internalNote: "Ưa kiểu tóc gọn, dễ chăm sóc.",
@@ -170,10 +167,8 @@ export class MemoryRepository implements Repository {
         id: "customer-nam",
         name: "Hoàng Nam",
         phone: "0933333333",
-        email: "hoang.nam@hairmatch.vn",
         passwordHash: await hashPassword("Customer123!"),
         role: "customer",
-        tier: "silver",
         loyaltyPoints: 90,
         blacklisted: false,
         hairHistory: []
@@ -182,7 +177,11 @@ export class MemoryRepository implements Repository {
 
     this.users.put(admin);
     this.users.put(customer);
+    this.users.put(barberAccount);
     sampleCustomers.forEach((sampleCustomer) => this.users.put(sampleCustomer));
+    for (const demoCustomer of demoCustomerAccounts) {
+      this.users.put({ ...demoCustomer, passwordHash: await hashPassword(demoCustomerPassword), role: "customer", blacklisted: false, hairHistory: [] });
+    }
 
     this.sessions.put("demo-customer-token", {
       userId: customer.id,
@@ -237,6 +236,7 @@ export class MemoryRepository implements Repository {
       {
         id: "barber-1",
         name: "Minh",
+        phone: "0900000201",
         bio: "Cắt tóc gọn gàng, phong cách hiện đại.",
         imageUrl: "",
         active: true,
@@ -247,6 +247,7 @@ export class MemoryRepository implements Repository {
       {
         id: "barber-2",
         name: "An",
+        phone: "0900000202",
         bio: "Tư vấn màu tóc và tạo kiểu.",
         imageUrl: "",
         active: true,
@@ -257,6 +258,7 @@ export class MemoryRepository implements Repository {
       {
         id: "barber-3",
         name: "Lâm",
+        phone: "0900000203",
         bio: "Chuyên taper, fade gọn và tư vấn kiểu tóc dễ chăm sóc.",
         imageUrl: "",
         active: true,
@@ -267,6 +269,7 @@ export class MemoryRepository implements Repository {
       {
         id: "barber-4",
         name: "Duy",
+        phone: "0900000204",
         bio: "Master barber, nhiều kinh nghiệm uốn và tạo kiểu cổ điển.",
         imageUrl: "",
         active: true,
@@ -277,6 +280,7 @@ export class MemoryRepository implements Repository {
       {
         id: "barber-5",
         name: "Khoa",
+        phone: "0900000205",
         bio: "Stylist trẻ, cắt gọn và chăm sóc tóc nam.",
         imageUrl: "",
         active: true,
@@ -287,6 +291,15 @@ export class MemoryRepository implements Repository {
     ];
 
     barbers.forEach((barber) => this.barbers.put(barber));
+    for (const [barberId, id] of [
+      ["barber-1", "barber-account-minh"],
+      ["barber-2", "barber-account-an"],
+      ["barber-3", "barber-account-lam"],
+      ["barber-5", "barber-account-khoa"]
+    ]) {
+      const barber = this.barbers.get(barberId);
+      if (barber) this.users.put({ id, name: barber.name, phone: barber.phone, passwordHash: await hashPassword("Barber123!"), role: "barber", barberId });
+    }
 
     const today = DateTime.now()
       .setZone(SHOP_ZONE)

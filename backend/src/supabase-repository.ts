@@ -36,6 +36,7 @@ export class SupabaseRepository extends MemoryRepository {
     this.notifications = this.persistedCollection("hairmatch_notifications", this.notifications);
     this.pushDevices = this.persistedCollection("hairmatch_push_devices", this.pushDevices);
     this.supportMessages = this.persistedCollection("hairmatch_support_messages", this.supportMessages);
+    this.adminSettings = this.persistedCollection("hairmatch_admin_settings", this.adminSettings);
   }
 
   async initialize() {
@@ -103,7 +104,8 @@ export class SupabaseRepository extends MemoryRepository {
       ["hairmatch_vouchers", this.vouchers],
       ["hairmatch_notifications", this.notifications],
       ["hairmatch_push_devices", this.pushDevices],
-      ["hairmatch_support_messages", this.supportMessages]
+      ["hairmatch_support_messages", this.supportMessages],
+      ["hairmatch_admin_settings", this.adminSettings]
     ];
   }
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { api } from "../api";
 import type { Appointment, Barber, HairService, User } from "../types";
-import { Button, ErrorText, Field, shopDate, styles, timeLabel } from "../ui";
+import { Button, ComboBox, ErrorText, Field, shopDate, styles, timeLabel } from "../ui";
 import { Choice, DataState, DateField, FormModal, useAdminList } from "./components";
 
 function dateInShop(iso: string) {
@@ -81,11 +81,10 @@ export function AppointmentForm({ visible, item, onClose, onSaved }: {
   return <FormModal visible={visible} title={item ? "Sửa lịch hẹn" : "Thêm lịch hẹn"} onClose={() => { if (!busy) onClose(); }}>
     <ErrorText message={error} />
     <DataState loading={barbers.loading || services.loading || customers.loading} error={barbers.error || services.error || customers.error} retry={() => { void barbers.reload(); void services.reload(); if (!item) void customers.reload(); }} />
-    {!item && <><Text style={styles.muted}>Loại khách</Text><Choice value={customerMode} onChange={(value) => setCustomerMode(value as typeof customerMode)} options={[{ label: "Đã đăng ký", value: "registered" }, { label: "Khách vãng lai", value: "walkin" }]} />
-      {customerMode === "registered" ? <><Text style={styles.muted}>Khách hàng đã đăng ký</Text><Choice value={customerId} onChange={setCustomerId} options={(customers.data || []).filter((customer) => !customer.blacklisted).map((customer) => ({ label: `${customer.name}${customer.phone ? ` · ${customer.phone}` : ""}`, value: customer.id }))} /></> : <><Field label="Tên khách vãng lai" value={walkInName} onChange={setWalkInName} /><Field label="Số điện thoại (nếu có)" value={walkInPhone} onChange={setWalkInPhone} numeric /></>}
+    {!item && <><Text style={styles.muted}>Loại đặt lịch</Text><Choice value={customerMode} onChange={(value) => setCustomerMode(value as typeof customerMode)} options={[{ label: "Khách đã có hồ sơ", value: "registered" }, { label: "Khách đến trực tiếp", value: "walkin" }]} />
+      {customerMode === "registered" ? <><Text style={styles.muted}>Hồ sơ khách hàng</Text><Choice value={customerId} onChange={setCustomerId} options={(customers.data || []).filter((customer) => !customer.blacklisted).map((customer) => ({ label: `${customer.name}${customer.phone ? ` · ${customer.phone}` : ""}`, value: customer.id }))} /></> : <><Field label="Tên khách hàng" value={walkInName} onChange={setWalkInName} /><Field label="Số điện thoại (nếu có)" value={walkInPhone} onChange={setWalkInPhone} numeric /></>}
     </>}
-    <Text style={styles.muted}>Thợ tóc</Text>
-    <Choice value={barberId} onChange={(value) => { setBarberId(value); setStartAt(""); }} options={(barbers.data || []).filter((barber) => barber.active && (!barber.serviceIds || !serviceId || barber.serviceIds.includes(serviceId))).map((barber) => ({ label: barber.name, value: barber.id }))} />
+    <ComboBox label="Thợ tóc" value={barberId} onChange={(value) => { setBarberId(value); setStartAt(""); }} options={(barbers.data || []).filter((barber) => barber.active && (!barber.serviceIds || !serviceId || barber.serviceIds.includes(serviceId))).sort((a, b) => a.name.localeCompare(b.name, "vi")).map((barber) => ({ label: barber.name, value: barber.id }))} />
     <Text style={styles.muted}>Dịch vụ</Text>
     <Choice value={serviceId} onChange={(value) => { setServiceId(value); setStartAt(""); }} options={(services.data || []).filter((service) => service.active).map((service) => ({ label: service.name, value: service.id }))} />
     <DateField label="Ngày phục vụ" value={date} onChange={(value) => { setDate(value); setStartAt(""); }} />

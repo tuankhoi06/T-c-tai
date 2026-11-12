@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { api } from "../api";
 import type { Appointment, Barber, TimeBlock } from "../types";
-import { Button, Card, ErrorText, Field, colors, shopDate, styles } from "../ui";
-import { Choice, DateField, FormModal, TimeField, useAdminList } from "./components";
+import { Button, Card, ComboBox, DragScrollView, ErrorText, Field, colors, shopDate, styles } from "../ui";
+import { DateField, FormModal, TimeField, useAdminList } from "./components";
 
 const hourStart = 8, hourEnd = 21, unit = 84;
 const statusColor: Record<string, string> = {
@@ -61,7 +61,7 @@ export function AdminTimeline({ active, barbers, onOpen }: { active: boolean; ba
       <Button title="Chặn giờ bận" secondary onPress={() => { setBarberId(visibleBarbers[0]?.id || ""); setError(""); setFormOpen(true); }} />
     </View>
     <ErrorText message={error || appointments.error || blocks.error} />
-    <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 6 }}>
+    <DragScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 6 }}>
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: "row", marginLeft: 92 }}>{Array.from({ length: hourEnd - hourStart }, (_, index) => <Text key={index} style={[styles.muted, { width: unit, fontSize: 11 }]}>{String(hourStart + index).padStart(2, "0")}:00</Text>)}</View>
         {visibleBarbers.map((barber) => <View key={barber.id} style={{ flexDirection: "row", alignItems: "center" }}>
@@ -74,11 +74,11 @@ export function AdminTimeline({ active, barbers, onOpen }: { active: boolean; ba
           </View>
         </View>)}
       </View>
-    </ScrollView>
+    </DragScrollView>
     <View style={styles.row}>{Object.entries(statusColor).map(([status, color]) => <View key={status} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: color }} /><Text style={[styles.muted, { fontSize: 10 }]}>{({ pending: "Chờ", confirmed: "Xác nhận", in_progress: "Đang làm", completed: "Xong", cancelled: "Hủy", no_show: "Vắng" } as Record<string, string>)[status]}</Text></View>)}</View>
     {(blocks.data || []).length > 0 && <View style={{ gap: 5 }}><Text style={styles.muted}>Giờ đã chặn</Text>{blocks.data?.map((block) => <View key={block.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 7 }}><Text style={styles.muted}>{barbers.find((item) => item.id === block.barberId)?.name} · {block.startTime}–{block.endTime} · {block.reason}</Text><Button title="Mở lại" secondary onPress={() => void removeBlock(block.id)} /></View>)}</View>}
     <FormModal visible={formOpen} title="Chặn giờ bận" onClose={() => { if (!busy) setFormOpen(false); }}>
-      <ErrorText message={error} /><Text style={styles.muted}>Thợ</Text><Choice value={barberId} onChange={setBarberId} options={visibleBarbers.map((item) => ({ label: item.name, value: item.id }))} />
+      <ErrorText message={error} /><ComboBox label="Thợ" value={barberId} onChange={setBarberId} options={[...visibleBarbers].sort((a, b) => a.name.localeCompare(b.name, "vi")).map((item) => ({ label: item.name, value: item.id }))} />
       <Text style={styles.muted}>Ngày {day}</Text><TimeField label="Từ giờ" value={startTime} onChange={setStartTime} /><TimeField label="Đến giờ" value={endTime} onChange={setEndTime} /><Field label="Lý do" value={reason} onChange={setReason} />
       <Button title={busy ? "Đang lưu..." : "Chặn giờ"} disabled={busy} onPress={() => void addBlock()} />
     </FormModal>

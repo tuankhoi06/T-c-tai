@@ -99,8 +99,8 @@
           <!-- Customer Login Form -->
           <div id="form-cust-login" class="space-y-3 text-xs">
             <div>
-              <label class="text-neutral-400 block mb-1">Số điện thoại hoặc Email</label>
-              <input id="login-cust-id" type="text" value="0911111111" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+              <label class="text-neutral-400 block mb-1">Số điện thoại</label>
+              <input id="login-cust-id" type="tel" value="0911111111" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
             </div>
             <div>
               <label class="text-neutral-400 block mb-1">Mật khẩu</label>
@@ -119,20 +119,20 @@
           <!-- Customer Register Form -->
           <div id="form-cust-register" class="space-y-3 text-xs hidden">
             <div>
-              <label class="text-neutral-400 block mb-1">Họ và tên của bạn</label>
-              <input id="reg-cust-name" type="text" placeholder="Ví dụ: Nguyễn Văn An" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+              <label class="text-neutral-400 block mb-1">Tên đăng nhập</label>
+              <input id="reg-cust-name" type="text" placeholder="Ví dụ: nguyenan" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
             </div>
             <div>
               <label class="text-neutral-400 block mb-1">Số điện thoại</label>
-              <input id="reg-cust-phone" type="text" placeholder="09xxxxxxxx" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
-            </div>
-            <div>
-              <label class="text-neutral-400 block mb-1">Email (dùng nhận thông báo & quên mật khẩu)</label>
-              <input id="reg-cust-email" type="email" placeholder="example@gmail.com" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+              <input id="reg-cust-phone" type="tel" inputmode="numeric" placeholder="0901234567" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
             </div>
             <div>
               <label class="text-neutral-400 block mb-1">Mật khẩu (tối thiểu 8 ký tự)</label>
               <input id="reg-cust-pass" type="password" placeholder="••••••••" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+            </div>
+            <div>
+              <label class="text-neutral-400 block mb-1">Xác nhận mật khẩu</label>
+              <input id="reg-cust-confirm" type="password" placeholder="••••••••" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
             </div>
             <button onclick="handleRegisterCustomer()" class="w-full py-2.5 rounded-xl btn-gold text-xs font-bold shadow-md">
               Tạo tài khoản ngay
@@ -147,8 +147,8 @@
           </div>
           <div class="space-y-3 text-xs">
             <div>
-              <label class="text-neutral-400 block mb-1">Số điện thoại hoặc Email quản trị</label>
-              <input id="login-admin-id" type="text" value="0900000000" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+              <label class="text-neutral-400 block mb-1">Số điện thoại quản trị</label>
+              <input id="login-admin-id" type="tel" value="0900000000" class="w-full bg-[#181818] border border-neutral-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
             </div>
             <div>
               <label class="text-neutral-400 block mb-1">Mật khẩu quản trị</label>
@@ -478,10 +478,6 @@
               <p id="prof-cust-phone" class="font-bold text-white py-1">0911111111</p>
             </div>
             <div>
-              <label class="text-neutral-400 block mb-1">Email</label>
-              <p id="prof-cust-email" class="font-bold text-white py-1">customer@hairmatch.vn</p>
-            </div>
-            <div>
               <label class="text-neutral-400 block mb-1">Vai trò</label>
               <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">Khách hàng thân thiết</span>
             </div>
@@ -707,7 +703,11 @@
     }
 
     function triggerForgotPasswordDemo(roleName) {
-      alert(`[Demo Khôi phục mật khẩu]\n\nHệ thống HairMatch đã gửi hướng dẫn đặt lại mật khẩu đến Số điện thoại/Email đăng ký của ${roleName}.\n(Ở bản chính thức, mã OTP sẽ được gửi về thiết bị).`);
+      const phone = prompt(`Nhập số điện thoại tài khoản ${roleName}:`);
+      if (!phone) return;
+      if (!/^0\d{9}$/.test(phone.replace(/\D/g, ''))) { alert('Số điện thoại cần gồm 10 chữ số.'); return; }
+      const temporaryPassword = `HM${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}!`;
+      alert(`Mật khẩu tạm demo: ${temporaryPassword}\n\nBản HTML tĩnh chỉ minh họa giao diện, không thay đổi mật khẩu trong database.`);
     }
 
     // Portal Switching
@@ -779,13 +779,14 @@
 
     function handleRegisterCustomer() {
       const name = document.getElementById('reg-cust-name').value.trim();
-      const phone = document.getElementById('reg-cust-phone').value.trim();
-      const email = document.getElementById('reg-cust-email').value.trim();
+      const phone = document.getElementById('reg-cust-phone').value.trim().replace(/\D/g, '');
       const pass = document.getElementById('reg-cust-pass').value;
+      const confirm = document.getElementById('reg-cust-confirm').value;
 
       if (!name) { alert('Vui lòng nhập họ và tên.'); return; }
-      if (!phone && !email) { alert('Vui lòng nhập ít nhất Số điện thoại hoặc Email.'); return; }
+      if (!/^0\d{9}$/.test(phone)) { alert('Vui lòng nhập số điện thoại gồm 10 chữ số.'); return; }
       if (!pass || pass.length < 8) { alert('Mật khẩu cần tối thiểu 8 ký tự.'); return; }
+      if (pass !== confirm) { alert('Mật khẩu xác nhận không khớp.'); return; }
 
       showToast('Đăng ký tài khoản thành công!', '🎉');
       loginAs('customer', name);

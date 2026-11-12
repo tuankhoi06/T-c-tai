@@ -30,7 +30,7 @@ export function DataState({ loading, error, retry, empty }: { loading: boolean; 
 }
 
 export function Choice({ options, value, onChange }: { options: { label: string; value: string }[]; value: string; onChange: (value: string) => void }) {
-  return <View style={styles.row}>{options.map((option) => <Pressable key={option.value} onPress={() => onChange(option.value)} style={[styles.button, value !== option.value && styles.buttonSecondary, { paddingVertical: 8, paddingHorizontal: 11 }]}>
+  return <View style={styles.row}>{options.map((option) => <Pressable key={option.value} onPress={() => onChange(option.value)} style={[styles.button, value !== option.value && styles.buttonSecondary, { minHeight: 44, paddingVertical: 8, paddingHorizontal: 11 }]}>
     <Text style={[styles.buttonText, value !== option.value && { color: colors.text }]}>{option.label}</Text>
   </Pressable>)}</View>;
 }
@@ -39,7 +39,7 @@ export function FormModal({ title, visible, children, onClose }: { title: string
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
     <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 16 }}>
       <View style={{ width: "100%", maxWidth: 560, maxHeight: "90%", alignSelf: "center" }}>
-        <ScrollView keyboardShouldPersistTaps="handled"><Card><View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><Text style={styles.subtitle}>{title}</Text><Button title="Đóng" secondary onPress={onClose} /></View>{children}</Card></ScrollView>
+        <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled><Card><View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><Text style={styles.subtitle}>{title}</Text><Button title="Đóng" secondary onPress={onClose} /></View>{children}</Card></ScrollView>
       </View>
     </View>
   </Modal>;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, SafeAreaView, Alert, ImageBackground } from "react-native";
+import { View, Text, Pressable, ImageBackground, Platform } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { api, clearToken, onUnauthorized, restoreToken, saveToken } from "../src/api";
 import { User } from "../src/types";
 import {
@@ -15,31 +16,38 @@ import {
 import { Customer } from "../src/Customer";
 import { Consultation } from "../src/Consultation";
 import { Admin } from "../src/Admin";
+import { BarberApp } from "../src/Barber";
 import { photos } from "../src/visuals";
 import { unregisterPushToken } from "../src/push";
 
 export default function AppIndex() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   // Separate portal: 'customer' vs 'admin'
-  const [portal, setPortal] = useState<"customer" | "admin">("customer");
+  const [portal, setPortal] = useState<"customer" | "admin" | "barber">("customer");
   // Customer sub-tab: 'login' vs 'register'
-  const [customerAuthMode, setCustomerAuthMode] = useState<"login" | "register">("login");
+  const [customerAuthMode, setCustomerAuthMode] = useState<"login" | "register" | "forgot">("login");
 
   // Auth fields
-  const [identifier, setIdentifier] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     onUnauthorized(() => {
       setCurrentUser(null);
     });
     checkAuth();
+    void (async () => {
+      const done = Platform.OS === "web" ? (typeof window !== "undefined" ? window.localStorage.getItem("hairmatch_onboarding") : "1") : await SecureStore.getItemAsync("hairmatch_onboarding");
+      setOnboardingStep(done ? -1 : 0);
+    })();
   }, []);
 
   async function checkAuth() {
@@ -47,8 +55,13 @@ export default function AppIndex() {
     try {
       const saved = await restoreToken();
       if (saved) {
-        const me = await api<User>("/me");
-        setCurrentUser(me);
+        try {
+          const me = await api<User>("/me");
+          setCurrentUser(me);
+          return;
+        } catch {
+          await clearToken();
+        }
       }
     } catch {
       await clearToken();
@@ -59,17 +72,18 @@ export default function AppIndex() {
   }
 
   async function handleLogin() {
-    const loginKey = identifier.trim() || phone.trim();
-    if (!loginKey || !password) {
-      setError("Vui lòng nhập số điện thoại hoặc email cùng mật khẩu.");
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone || !password) {
+      setError("Vui lòng nhập số điện thoại và mật khẩu.");
       return;
     }
     setLoading(true);
     setError("");
+    setNotice("");
     try {
       const res = await api<{ token: string; user: User }>("/auth/login", {
         method: "POST",
-        body: { identifier: loginKey, password }
+        body: { phone: cleanPhone, password }
       });
       await saveToken(res.token);
       setCurrentUser(res.user);
@@ -81,34 +95,26 @@ export default function AppIndex() {
   }
 
   async function handleRegister() {
-    const cleanPhone = phone.trim();
-    const cleanEmail = email.trim();
-
-    if (!name.trim()) {
-      setError("Vui lòng nhập họ và tên.");
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (name.trim().length < 2) {
+      setError("Tên đăng nhập cần ít nhất 2 ký tự.");
       return;
     }
-    if (!cleanPhone && !cleanEmail) {
-      setError("Vui lòng nhập ít nhất số điện thoại hoặc email để đăng ký và lấy lại mật khẩu sau này.");
+    if (!/^0\d{9}$/.test(cleanPhone)) {
+      setError("Số điện thoại cần gồm 10 chữ số và bắt đầu bằng 0.");
       return;
     }
     if (!password || password.length < 8) {
       setError("Mật khẩu cần tối thiểu 8 ký tự.");
       return;
     }
+    if (password !== confirmPassword) { setError("Mật khẩu xác nhận không khớp."); return; }
 
     setLoading(true);
     setError("");
+    setNotice("");
     try {
-      const res = await api<{ token: string; user: User }>("/auth/register", {
-        method: "POST",
-        body: {
-          name: name.trim(),
-          phone: cleanPhone || undefined,
-          email: cleanEmail || undefined,
-          password
-        }
-      });
+      const res = await api<{ token: string; user: User }>("/auth/register", { method: "POST", body: { username: name.trim(), phone: cleanPhone, password } });
       await saveToken(res.token);
       setCurrentUser(res.user);
     } catch (err: any) {
@@ -118,11 +124,16 @@ export default function AppIndex() {
     }
   }
 
-  function handleForgotPassword() {
-    Alert.alert(
-      "Quên mật khẩu (Bản thử nghiệm Demo)",
-      "Tính năng đang chạy ở chế độ demo.\nMã xác thực khôi phục mật khẩu sẽ được gửi đến số điện thoại hoặc email đã đăng ký của bạn khi hệ thống kết nối dịch vụ SMS/Mail."
-    );
+  async function handleForgotPassword() {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!/^0\d{9}$/.test(cleanPhone)) { setError("Nhập số điện thoại gồm 10 chữ số."); return; }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const res = await api<{ temporaryPassword: string; message: string }>("/auth/forgot-password", { method: "POST", body: { phone: cleanPhone } });
+      setTemporaryPassword(res.temporaryPassword);
+      setNotice(res.message);
+    } catch (err: any) { setError(err.message || "Không cấp được mật khẩu tạm."); }
+    finally { setLoading(false); }
   }
 
   async function handleLogout() {
@@ -135,31 +146,52 @@ export default function AppIndex() {
       await clearToken();
       setCurrentUser(null);
       setPassword("");
-      setIdentifier("");
+      setPhone("");
+      setCustomerAuthMode("login");
     }
   }
 
   // Quick fill helper
-  function fillDemo(type: "admin" | "customer") {
+  function fillDemo(type: "admin" | "customer" | "barber") {
     if (type === "admin") {
       setPortal("admin");
-      setIdentifier("0900000000");
+      setPhone("0900000000");
       setPassword("Admin123!");
+    } else if (type === "barber") {
+      setPortal("barber");
+      setPhone("0900000204");
+      setPassword("Barber123!");
     } else {
       setPortal("customer");
       setCustomerAuthMode("login");
-      setIdentifier("0911111111");
+      setPhone("0911111111");
       setPassword("Customer123!");
     }
   }
 
-  if (loading && !currentUser) {
+  if (onboardingStep === null || (loading && !currentUser)) {
     return (
       <View style={[styles.page, { justifyContent: "center", alignItems: "center" }]}>
         <Loading />
         <Text style={styles.muted}>Đang khởi tạo HairMatch...</Text>
       </View>
     );
+  }
+  if (onboardingStep >= 0) {
+    const slides = [
+      { title: "Chọn kiểu tóc phù hợp", body: "Tải ảnh chân dung để nhận gợi ý AI và chuyển kiểu tóc mong muốn cho thợ." },
+      { title: "Đặt lịch nhanh", body: "Chọn dịch vụ, thợ và giờ còn trống. Xem lịch và thông báo ngay trong ứng dụng." },
+      { title: "Theo dõi trải nghiệm", body: "Xem lịch sử, ưu đãi và đánh giá sau khi hoàn thành ca." }
+    ];
+    return <Page><Text style={styles.muted}>HAIRMATCH · {onboardingStep + 1}/3</Text>
+      <Card><Text style={styles.title}>{slides[onboardingStep].title}</Text><Text style={styles.text}>{slides[onboardingStep].body}</Text></Card>
+      <Button title={onboardingStep === 2 ? "Bắt đầu" : "Tiếp tục"} onPress={() => {
+        if (onboardingStep < 2) { setOnboardingStep(onboardingStep + 1); return; }
+        if (Platform.OS === "web") { if (typeof window !== "undefined") window.localStorage.setItem("hairmatch_onboarding", "1"); }
+        else void SecureStore.setItemAsync("hairmatch_onboarding", "1");
+        setOnboardingStep(-1);
+      }} />
+    </Page>;
   }
 
   // Not logged in -> Show Separated Portals (Customer vs Admin)
@@ -208,6 +240,9 @@ export default function AppIndex() {
               🔐 Chủ tiệm (Admin)
             </Text>
           </Pressable>
+          <Pressable onPress={() => { setPortal("barber"); setError(""); }} style={[styles.button, portal !== "barber" && styles.buttonSecondary, { flex: 1, paddingVertical: 11 }]}>
+            <Text style={[styles.buttonText, { fontSize: 13 }, portal !== "barber" && { color: colors.text }]}>✂ Thợ</Text>
+          </Pressable>
         </View>
 
         <ErrorText message={error} />
@@ -216,7 +251,7 @@ export default function AppIndex() {
         {portal === "customer" && (
           <View style={{ gap: 10 }}>
             {/* Customer Sub-tabs: Login / Register */}
-            <View style={{ flexDirection: "row", gap: 10 }}>
+            {(customerAuthMode === "login" || customerAuthMode === "register") && <View style={{ flexDirection: "row", gap: 10 }}>
               <Pressable
                 onPress={() => {
                   setCustomerAuthMode("login");
@@ -247,16 +282,20 @@ export default function AppIndex() {
                   Đăng ký
                 </Text>
               </Pressable>
-            </View>
+            </View>}
+
+            {customerAuthMode !== "login" && customerAuthMode !== "register" && <Button title="← Quay lại đăng nhập" secondary onPress={() => { setCustomerAuthMode("login"); setError(""); setNotice(""); }} />}
+            {!!notice && <Text style={[styles.muted, { color: colors.gold }]}>{notice}</Text>}
 
             {/* Customer Login Form */}
             {customerAuthMode === "login" && (
               <Card>
                 <Text style={[styles.subtitle, { fontSize: 16 }]}>Đăng nhập dành cho Khách hàng</Text>
                 <Field
-                  label="Số điện thoại hoặc Email"
-                  value={identifier}
-                  onChange={setIdentifier}
+                  label="Số điện thoại"
+                  value={phone}
+                  onChange={setPhone}
+                  numeric
                 />
                 <Field
                   label="Mật khẩu"
@@ -265,11 +304,10 @@ export default function AppIndex() {
                   secure
                 />
 
-                {/* Quên mật khẩu (Demo) */}
                 <View style={{ alignItems: "flex-end", marginTop: 2 }}>
-                  <Pressable onPress={handleForgotPassword}>
+                  <Pressable onPress={() => { setCustomerAuthMode("forgot"); setError(""); setNotice(""); setTemporaryPassword(""); }}>
                     <Text style={{ color: colors.gold, fontSize: 13, fontWeight: "600" }}>
-                      Quên mật khẩu? (Demo)
+                      Quên mật khẩu?
                     </Text>
                   </Pressable>
                 </View>
@@ -298,20 +336,15 @@ export default function AppIndex() {
               <Card>
                 <Text style={[styles.subtitle, { fontSize: 16 }]}>Tạo tài khoản Khách hàng mới</Text>
                 <Field
-                  label="Họ và tên của bạn"
+                  label="Tên đăng nhập"
                   value={name}
                   onChange={setName}
                 />
                 <Field
-                  label="Số điện thoại (dùng để đặt lịch & khôi phục)"
+                  label="Số điện thoại"
                   value={phone}
                   onChange={setPhone}
                   numeric
-                />
-                <Field
-                  label="Email (dùng nhận thông báo & quên mật khẩu)"
-                  value={email}
-                  onChange={setEmail}
                 />
                 <Field
                   label="Mật khẩu (tối thiểu 8 ký tự)"
@@ -319,39 +352,44 @@ export default function AppIndex() {
                   onChange={setPassword}
                   secure
                 />
-
-                <Text style={[styles.muted, { fontSize: 12 }]}>
-                  * Bạn có thể đăng ký bằng số điện thoại hoặc email (hoặc cả hai) để sử dụng khôi phục mật khẩu sau này.
-                </Text>
-
+                <Field label="Xác nhận mật khẩu" value={confirmPassword} onChange={setConfirmPassword} secure />
                 <View style={{ marginTop: 6 }}>
                   <Button
-                    title="Tạo tài khoản ngay"
+                    title="Tạo tài khoản"
                     onPress={handleRegister}
                     disabled={loading}
                   />
                 </View>
               </Card>
             )}
+
+            {customerAuthMode === "forgot" && <Card>
+              <Text style={[styles.subtitle, { fontSize: 16 }]}>Khôi phục mật khẩu</Text>
+              <Text style={styles.muted}>Nhập số điện thoại tài khoản để tạo mật khẩu tạm mới. Mật khẩu sẽ hiện ngay bên dưới.</Text>
+              <Field label="Số điện thoại" value={phone} onChange={(value) => { setPhone(value); setTemporaryPassword(""); }} numeric />
+              <Button title={loading ? "Đang tạo..." : "Tạo mật khẩu tạm"} onPress={() => void handleForgotPassword()} disabled={loading} />
+              {!!temporaryPassword && <Card style={{ borderColor: colors.danger }}><Text style={[styles.text, { fontWeight: "800" }]}>Mật khẩu tạm mới</Text><Text selectable style={[styles.title, { color: colors.gold }]}>{temporaryPassword}</Text><Text style={styles.muted}>Đăng nhập bằng mật khẩu này. Có thể đổi sau trong hồ sơ.</Text></Card>}
+            </Card>}
           </View>
         )}
 
         {/* ===================== PORTAL 2: ADMIN ===================== */}
-        {portal === "admin" && (
+        {(portal === "admin" || portal === "barber") && (
           <Card>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={[styles.subtitle, { color: colors.gold, fontSize: 17 }]}>
-                Cổng Quản trị viên (Chủ tiệm)
+                {portal === "barber" ? "Đăng nhập thợ" : "Cổng Quản trị viên (Chủ tiệm)"}
               </Text>
             </View>
             <Text style={[styles.muted, { fontSize: 13 }]}>
-              Khu vực dành riêng cho chủ salon và quản lý ca làm việc, duyệt lịch hẹn.
+              {portal === "barber" ? "Tài khoản thợ do chủ tiệm tạo. Chỉ xem lịch cá nhân và hoa hồng." : "Khu vực dành riêng cho chủ salon và quản lý ca làm việc, duyệt lịch hẹn."}
             </Text>
 
-            <Field
-              label="Số điện thoại hoặc Email quản trị"
-              value={identifier}
-              onChange={setIdentifier}
+            {customerAuthMode !== "forgot" && <><Field
+              label="Số điện thoại"
+              value={phone}
+              onChange={setPhone}
+              numeric
             />
             <Field
               label="Mật khẩu quản trị"
@@ -360,29 +398,41 @@ export default function AppIndex() {
               secure
             />
 
-            <View style={{ alignItems: "flex-end", marginTop: 2 }}>
-              <Pressable onPress={handleForgotPassword}>
-                <Text style={{ color: colors.gold, fontSize: 13, fontWeight: "600" }}>
-                  Quên mật khẩu quản trị? (Demo)
-                </Text>
-              </Pressable>
-            </View>
-
             <View style={{ marginTop: 6 }}>
               <Button
-                title="Đăng nhập Quản trị"
+                title={portal === "barber" ? "Đăng nhập thợ" : "Đăng nhập Quản trị"}
                 onPress={handleLogin}
                 disabled={loading}
               />
             </View>
 
-            <View style={{ marginTop: 6 }}>
+            {portal === "admin" && <View style={{ marginTop: 6 }}>
               <Button
-                title="Điền nhanh tài khoản Admin demo (0900000000)"
+                title="Điền nhanh tài khoản Admin demo"
                 secondary
                 onPress={() => fillDemo("admin")}
               />
+            </View>}
+            {portal === "barber" && <View style={{ marginTop: 6 }}>
+              <Button
+                title="Điền nhanh tài khoản Duy"
+                secondary
+                onPress={() => fillDemo("barber")}
+              />
+            </View>}
+            </>}
+            <View style={{ marginTop: 6, alignItems: "flex-end" }}>
+              <Pressable onPress={() => { setCustomerAuthMode("forgot"); setTemporaryPassword(""); setError(""); setNotice(""); }}>
+                <Text style={{ color: colors.gold, fontSize: 13, fontWeight: "600" }}>Quên mật khẩu?</Text>
+              </Pressable>
             </View>
+            {customerAuthMode === "forgot" && <View style={{ gap: 10, marginTop: 8 }}>
+              <Button title="← Quay lại đăng nhập" secondary onPress={() => { setCustomerAuthMode("login"); setTemporaryPassword(""); setError(""); setNotice(""); }} />
+              <Text style={styles.muted}>Nhập số điện thoại tài khoản để tạo mật khẩu tạm mới.</Text>
+              <Field label="Số điện thoại" value={phone} onChange={(value) => { setPhone(value); setTemporaryPassword(""); }} numeric />
+              <Button title={loading ? "Đang tạo..." : "Tạo mật khẩu tạm"} onPress={() => void handleForgotPassword()} disabled={loading} />
+              {!!temporaryPassword && <Card style={{ borderColor: colors.danger }}><Text style={[styles.text, { fontWeight: "800" }]}>Mật khẩu tạm mới</Text><Text selectable style={[styles.title, { color: colors.gold }]}>{temporaryPassword}</Text></Card>}
+            </View>}
           </Card>
         )}
       </Page>
@@ -393,6 +443,7 @@ export default function AppIndex() {
   if (currentUser.role === "admin") {
     return <Admin user={currentUser} onLogout={handleLogout} />;
   }
+  if (currentUser.role === "barber") return <BarberApp user={currentUser} onLogout={handleLogout} />;
 
   // Customer Role View (features 4 bottom navigation tabs: Home, AI, Appointments, Profile)
   return (

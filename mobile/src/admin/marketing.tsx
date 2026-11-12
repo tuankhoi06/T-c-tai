@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { api } from "../api";
 import type { Notification, User, Voucher } from "../types";
-import { Button, Card, colors, ErrorText, Field, money, shopDate, styles } from "../ui";
+import { Button, Card, colors, ComboBox, ErrorText, Field, money, shopDate, styles } from "../ui";
 import { Choice, DataState, DateField, TimeField, useAdminList } from "./components";
 
 const blank = { code: "", kind: "percent", value: "10", maxUses: "50", from: shopDate(), to: shopDate(30), startTime: "", endTime: "", active: true };
@@ -72,7 +72,8 @@ export function MarketingAdmin({ active }: { active: boolean }) {
     </Card>}
     <Text style={styles.subtitle}>Thông báo cho khách</Text>
     <Text style={styles.muted}>Thông báo được lưu trong app; thiết bị đã đăng ký token sẽ nhận push qua Expo. Hệ thống tạo nhắc lịch 1–2 giờ trước giờ hẹn.</Text>
-    <Card><Text style={styles.muted}>Người nhận</Text><Choice value={target} onChange={setTarget} options={[{ label: "Tất cả khách", value: "" }, ...(customers.data || []).map((item) => ({ label: item.name, value: item.id }))]} />
+    <Card><ComboBox label="Người nhận" value={target} onChange={setTarget} searchable searchPlaceholder="Tìm theo tên hoặc số điện thoại" options={[{ label: "Tất cả khách", value: "" }, ...[...(customers.data || [])].sort((a, b) => a.name.localeCompare(b.name, "vi")).map((item) => ({ label: item.name, value: item.id, searchText: item.phone || "" }))]} />
+      <Text style={styles.muted}>{customers.data?.length || 0} khách trong danh sách · {target ? "Đang gửi riêng cho một khách" : "Đang gửi cho tất cả khách"}</Text>
       <Field label="Tiêu đề" value={title} onChange={setTitle} /><Field label="Nội dung" value={body} onChange={setBody} multiline />
       <Button title={busy ? "Đang gửi..." : "Gửi thông báo"} disabled={busy || title.trim().length < 2 || body.trim().length < 2} onPress={() => void send()} />
     </Card>

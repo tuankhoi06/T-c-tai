@@ -43,6 +43,19 @@ export function overlaps(
   return startA < endB && endA > startB;
 }
 
+export function appointmentCommission(appointment: Appointment, currentRate = 0): number {
+  if (!isAppointmentPaymentConfirmed(appointment)) return 0;
+  if (typeof appointment.commissionAmount === "number") return appointment.commissionAmount;
+  const rate = appointment.commissionRateSnapshot ?? currentRate;
+  return Math.round((appointment.amountPaid || 0) * rate / 100);
+}
+
+export function isAppointmentPaymentConfirmed(appointment: Appointment): boolean {
+  // Keep historical demo/production payments recognized when older rows lack the confirmation timestamp.
+  return appointment.status === "completed" && typeof appointment.amountPaid === "number" &&
+    Boolean(appointment.paymentConfirmedAt || appointment.paymentMethod);
+}
+
 export class BookingService {
   private mutexes = new Map<string, Mutex>();
 
@@ -193,7 +206,7 @@ export class BookingService {
       const service = services[0];
 
       ensure(barber?.active, 404, "Thợ không hoạt động.");
-      ensure(!user.blacklisted, 403, "Tài khoản cần liên hệ tiệm trước khi đặt lịch.");
+      ensure(!user.blacklisted && (user.noShowCount || 0) < 2, 403, "Tài khoản cần gọi hotline để đặt lịch do đã vắng mặt 2 lần.");
       ensure(!barber.serviceIds || services.every((item) => barber.serviceIds!.includes(item.id)), 400, "Thợ không thực hiện đủ dịch vụ đã chọn.");
 
       ensure(
@@ -253,6 +266,9 @@ export class BookingService {
         price: item.promotionPrice ?? item.price, durationMinutes: item.durationMinutes }));
       const basePrice = serviceItems.reduce((total, item) => total + item.price, 0);
       const { discount, voucher } = this.voucherDiscount(input.voucherCode, basePrice, start, true, user.id);
+      const depositRequired = services.some((item) => item.category === "chemical")
+        ? Math.min(100000, Math.max(50000, Math.round((basePrice - discount) * 0.2 / 10000) * 10000)) : 0;
+      ensure(input.walkIn || !depositRequired || input.paymentChoice === "prepay", 400, "Dịch vụ hóa chất cần đặt cọc mô phỏng trước khi xác nhận lịch.");
 
       const appointment: Appointment = {
         id: randomUUID(),
@@ -269,6 +285,7 @@ export class BookingService {
         ...(input.note ? { note: input.note } : {}),
         ...(input.styleName ? { styleName: input.styleName } : {}),
         paymentChoice: input.paymentChoice || "salon",
+        depositRequired: input.walkIn ? 0 : depositRequired,
         ...(input.walkIn ? { walkIn: true } : {}),
         ...(voucher ? { voucherCode: voucher.code, discountAmount: discount } : {}),
         durationSnapshot: serviceItems.reduce((total, item) => total + item.durationMinutes, 0),
@@ -380,7 +397,8 @@ export class BookingService {
     id: string,
     status: AppointmentStatus,
     cancelReason?: string,
-    payment?: { method: "cash" | "transfer" | "card"; amount: number }
+    payment?: { method: "cash" | "transfer" | "card"; amount: number },
+    adminId?: string
   ): Appointment {
     const appointment = this.repo.appointments.get(id);
     ensure(appointment, 404, "Không tìm thấy lịch hẹn.");
@@ -412,6 +430,7 @@ export class BookingService {
     }
 
     if (status === "confirmed") {
+      ensure(!appointment.depositRequired || (appointment.simulatedPaid || 0) >= appointment.depositRequired, 409, "Khách chưa hoàn tất đặt cọc mô phỏng.");
       ensure(
         DateTime.fromISO(appointment.startAt) > DateTime.now(),
         409,
@@ -423,19 +442,28 @@ export class BookingService {
       ensure(DateTime.fromISO(appointment.startAt) <= DateTime.now(), 409, "Chưa đến giờ hẹn.");
     }
     if (status === "completed" && payment) {
-      ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot, 400, "Số tiền thực thu không hợp lệ.");
+      ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot - (appointment.simulatedPaid || 0), 400, "Số tiền thực thu không hợp lệ.");
     }
 
     if (status === "cancelled") {
       ensure(cancelReason && cancelReason.trim().length >= 3, 400, "Cần nhập lý do hủy lịch (ít nhất 3 ký tự).");
     }
 
+    const commissionRateSnapshot = appointment.commissionRateSnapshot ?? (this.repo.barbers.get(appointment.barberId)?.commissionRate || 0);
+    const amountPaid = payment ? payment.amount + (appointment.simulatedPaid || 0) : undefined;
     const updated: Appointment = { ...appointment, status,
       ...(status === "cancelled" ? { cancelReason: cancelReason!.trim() } : {}),
       ...(status === "in_progress" ? { startedAt: new Date().toISOString() } : {}),
-      ...(status === "completed" && payment ? { paymentMethod: payment.method, amountPaid: payment.amount } : {})
+      ...(status === "completed" ? {
+        ...(payment ? { commissionRateSnapshot, commissionAmount: Math.round((amountPaid || 0) * commissionRateSnapshot / 100),
+          paymentMethod: payment.method, amountPaid, paymentConfirmedAt: new Date().toISOString(), ...(adminId ? { paymentConfirmedBy: adminId } : {}) } : {})
+      } : {})
     };
     this.repo.appointments.put(updated);
+    if (status === "no_show" && !appointment.walkIn) {
+      const customer = this.repo.users.get(appointment.customerId);
+      if (customer) this.repo.users.put({ ...customer, noShowCount: (customer.noShowCount || 0) + 1 });
+    }
     if (status === "cancelled" || status === "no_show") this.releaseVoucher(appointment);
     if (status === "confirmed" || status === "cancelled" || status === "no_show") {
       const title = status === "confirmed" ? "Salon đã xác nhận lịch hẹn" : status === "no_show" ? "Lịch hẹn được ghi nhận vắng mặt" : "Salon đã hủy lịch hẹn";
@@ -443,19 +471,46 @@ export class BookingService {
         body: `${appointment.serviceNameSnapshot} · ${DateTime.fromISO(appointment.startAt).setZone(SHOP_ZONE).toFormat("HH:mm dd/MM")}${cancelReason ? ` · ${cancelReason.trim()}` : ""}`,
         kind: "booking", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
     }
+    if (status === "in_progress") {
+      this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId, title: "Thợ đã bắt đầu phục vụ",
+        body: `${appointment.serviceNameSnapshot} · ${DateTime.fromISO(appointment.startAt).setZone(SHOP_ZONE).toFormat("HH:mm dd/MM")}`,
+        kind: "booking", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
+    }
+    if (status === "completed" && payment && !appointment.walkIn) {
+      this.awardLoyalty(updated, amountPaid || 0);
+    }
     if (status === "completed" && !appointment.walkIn) {
-      const points = Math.floor((payment?.amount || 0) / 10000);
-      const customer = this.repo.users.get(appointment.customerId);
-      if (customer && points) this.repo.users.put({ ...customer, loyaltyPoints: (customer.loyaltyPoints || 0) + points });
-      if (points) this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId,
-        title: `Bạn nhận ${points} điểm thưởng`, body: `Số dư mới: ${(customer?.loyaltyPoints || 0) + points} điểm. Đổi 100 điểm lấy mã giảm 50.000đ.`,
-        kind: "loyalty", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
       this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId,
         title: "Cảm ơn bạn đã ghé tiệm", body: "Đánh giá trải nghiệm của bạn nhé!",
         kind: "review_invite", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
     }
 
     return updated;
+  }
+
+  confirmPayment(id: string, payment: { method: "cash" | "transfer" | "card"; amount: number }, adminId: string): Appointment {
+    const appointment = this.repo.appointments.get(id);
+    ensure(appointment, 404, "Không tìm thấy lịch hẹn.");
+    ensure(appointment.status === "completed", 409, "Chỉ xác nhận thanh toán cho ca đã hoàn thành.");
+    ensure(!isAppointmentPaymentConfirmed(appointment), 409, "Lịch này đã được xác nhận thanh toán.");
+    ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot - (appointment.simulatedPaid || 0), 400, "Số tiền thực thu không hợp lệ.");
+    const amountPaid = payment.amount + (appointment.simulatedPaid || 0);
+    const commissionRateSnapshot = appointment.commissionRateSnapshot ?? (this.repo.barbers.get(appointment.barberId)?.commissionRate || 0);
+    const updated: Appointment = { ...appointment, paymentMethod: payment.method, amountPaid,
+      paymentConfirmedAt: new Date().toISOString(), paymentConfirmedBy: adminId,
+      commissionRateSnapshot, commissionAmount: Math.round(amountPaid * commissionRateSnapshot / 100) };
+    this.repo.appointments.put(updated);
+    if (!appointment.walkIn) this.awardLoyalty(updated, amountPaid);
+    return updated;
+  }
+
+  private awardLoyalty(appointment: Appointment, amountPaid: number) {
+    const points = Math.floor(amountPaid / 10000);
+    const customer = this.repo.users.get(appointment.customerId);
+    if (customer && points) this.repo.users.put({ ...customer, loyaltyPoints: (customer.loyaltyPoints || 0) + points });
+    if (points) this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId,
+      title: `Bạn nhận ${points} điểm thưởng`, body: `Số dư mới: ${(customer?.loyaltyPoints || 0) + points} điểm. Đổi 100 điểm lấy mã giảm 50.000đ.`,
+      kind: "loyalty", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
   }
 }
 

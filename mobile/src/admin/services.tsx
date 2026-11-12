@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Image, Text, View } from "react-native";
 import { api } from "../api";
 import type { HairService } from "../types";
-import { Button, Card, ErrorText, Field, money, styles, colors } from "../ui";
+import { Button, Card, ComboBox, ErrorText, Field, money, styles, colors } from "../ui";
 import { Choice, DangerConfirm, DataState, FormModal, useAdminList } from "./components";
 import { servicePhoto } from "../visuals";
 
@@ -13,6 +13,7 @@ export function ServicesAdmin({ active, onChanged }: { active: boolean; onChange
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
   const [editing, setEditing] = useState<HairService | "new" | null>(null);
   const [form, setForm] = useState(blank);
   const [target, setTarget] = useState<HairService | null>(null);
@@ -58,13 +59,17 @@ export function ServicesAdmin({ active, onChanged }: { active: boolean; onChange
     } catch (err: any) { setDeleting(null); setError(err.message || "Không xóa được dịch vụ."); }
     finally { setBusy(false); }
   }
-  const visible = (list.data || []).filter((item) => (filter === "all" || item.active === (filter === "active")) && (categoryFilter === "all" || item.category === categoryFilter) && item.name.toLocaleLowerCase("vi-VN").includes(search.toLocaleLowerCase("vi-VN")));
+  const visible = (list.data || []).filter((item) => (filter === "all" || item.active === (filter === "active")) && (categoryFilter === "all" || item.category === categoryFilter) && `${item.name} ${item.description}`.toLocaleLowerCase("vi-VN").includes(search.trim().toLocaleLowerCase("vi-VN")))
+    .sort((a, b) => sortBy === "price-asc" ? (a.promotionPrice ?? a.price) - (b.promotionPrice ?? b.price) :
+      sortBy === "price-desc" ? (b.promotionPrice ?? b.price) - (a.promotionPrice ?? a.price) :
+        sortBy === "duration" ? a.durationMinutes - b.durationMinutes : a.name.localeCompare(b.name, "vi"));
   return <View style={{ gap: 12 }}>
     <Text style={styles.subtitle}>Dịch vụ</Text><View style={styles.row}><Button title="Thêm dịch vụ" onPress={() => open("new")} /><Button title="Làm mới" secondary disabled={list.loading} onPress={() => void list.reload()} /></View>
     {!!success && <Text style={{ color: colors.success }}>{success}</Text>}<ErrorText message={!editing && !target ? error : ""} />
     <Field label="Tìm dịch vụ" value={search} onChange={setSearch} />
     <Choice value={filter} onChange={setFilter} options={[{ label: "Tất cả", value: "all" }, { label: "Đang hoạt động", value: "active" }, { label: "Tạm ngừng", value: "inactive" }]} />
-    <Choice value={categoryFilter} onChange={setCategoryFilter} options={[{ label: "Mọi danh mục", value: "all" }, ...categories]} />
+    <ComboBox label="Danh mục" value={categoryFilter} onChange={setCategoryFilter} options={[{ label: "Mọi danh mục", value: "all" }, ...categories]} />
+    <ComboBox label="Sắp xếp" value={sortBy} onChange={setSortBy} options={[{ label: "Tên A–Z", value: "name" }, { label: "Giá thấp", value: "price-asc" }, { label: "Giá cao", value: "price-desc" }, { label: "Thời lượng ngắn", value: "duration" }]} />
     <DataState loading={list.loading} error={list.error} retry={() => void list.reload()} empty={visible.length === 0} />
     {!list.error && visible.map((item) => <Card key={item.id} style={{ padding: 12, gap: 8 }}>
       <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>

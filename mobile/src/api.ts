@@ -1,9 +1,20 @@
 import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL;
+const expoHostUri = Constants.expoConfig?.hostUri;
+const expoDevHost = expoHostUri?.split(":")[0];
+const isLoopbackUrl = (value: string) => /localhost|127\.0\.0\.1|10\.0\.2\.2/i.test(value);
+const nativeDevApiUrl = expoDevHost
+  ? `http://${expoDevHost}:4000/api`
+  : Platform.OS === "android"
+    ? "http://10.0.2.2:4000/api"
+    : "http://localhost:4000/api";
 const BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://10.0.2.2:4000/api"
+  Platform.OS !== "web" && configuredApiUrl && isLoopbackUrl(configuredApiUrl)
+    ? nativeDevApiUrl
+    : configuredApiUrl ?? (Platform.OS === "web" ? "http://localhost:4000/api" : nativeDevApiUrl)
 ).replace(/\/$/, "");
 
 const TOKEN_KEY = "hairmatch_token";

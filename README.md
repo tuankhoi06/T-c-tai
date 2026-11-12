@@ -1,7 +1,7 @@
 # HairMatch — Ứng Dụng Đặt Lịch Cắt Tóc & AI Tư Vấn Kiểu Tóc
 
 > **Bài tập lớn cuối kỳ môn Lập trình ứng dụng di động**  
-> Mô hình: Một salon tóc cao cấp với 2 vai trò **Khách hàng** và **Quản trị viên (Chủ tiệm)**.
+> Mô hình: Một salon tóc cao cấp với 3 vai trò **Khách hàng**, **Thợ** và **Quản trị viên (Chủ tiệm)**.
 
 ---
 
@@ -28,7 +28,7 @@ hairmatch/
 ├── mobile/                             # Ứng dụng di động React Native Expo
 │   ├── app/
 │   │   ├── _layout.tsx                 # Cấu hình Stack & StatusBar Dark/Gold
-│   │   └── index.tsx                   # Cổng phân luồng Auth (Khách / Admin) & Điều hướng
+│   │   ├── index.tsx                   # Cổng phân luồng Auth (Khách / Admin) & Điều hướng
 │   ├── src/
 │   │   ├── Customer.tsx                # Giao diện Khách hàng (4 tabs: Home, AI, Lịch hẹn, Hồ sơ)
 │   │   ├── Consultation.tsx            # Chụp/chọn ảnh, khảo sát & kết quả AI kèm nút đặt lịch
@@ -66,7 +66,7 @@ hairmatch/
 
 | STT | Phân hệ / Nghiệp vụ | Yêu cầu | Trạng thái triển khai |
 | :--- | :--- | :--- | :--- |
-| **1** | **Xác thực & Phân quyền** | Phân luồng Khách hàng & Admin riêng biệt, Đăng ký bằng SĐT/Email, Quên mật khẩu demo, Hash mật khẩu Scrypt | ✅ Hoàn thành 100% |
+| **1** | **Xác thực & Phân quyền** | Khách, admin và thợ đăng nhập bằng số điện thoại/mật khẩu; khách đăng ký bằng tên đăng nhập, số điện thoại, mật khẩu và xác nhận; quên mật khẩu cấp mật khẩu tạm ngay trên app | ✅ Đã chuyển luồng sang số điện thoại |
 | **2** | **Trang chủ Khách hàng** | Tìm dịch vụ/thợ, lịch sắp tới ghim đầu, ưu đãi, đặt nhanh và lookbook dùng ảnh salon cung cấp | ✅ Hoàn thành |
 | **3** | **AI Tư vấn kiểu tóc** | Chụp/chọn ảnh trực diện, khảo sát sở thích, trả về 3 gợi ý kiểu tóc, màu nhuộm, uốn, disclaimer an toàn | ✅ Hoàn thành 100% |
 | **4** | **Chuyển từ AI sang Đặt lịch** | Bấm "Đặt lịch kiểu tóc này" trên kết quả AI -> tự động chuyển sang luồng đặt lịch và chọn dịch vụ | ✅ Hoàn thành 100% |
@@ -74,7 +74,7 @@ hairmatch/
 | **6** | **Quản lý lịch hẹn (Khách)** | Lịch sắp tới/lịch sử, mã nhận lịch, đổi/hủy trước 2 giờ kèm lý do, đặt lại, đánh giá và tải ảnh tóc | ✅ Hoàn thành |
 | **7** | **Hồ sơ cá nhân (Khách)** | Họ tên, ngày sinh, hạng/điểm thành viên, voucher sinh nhật, đổi điểm, ví ưu đãi, nhật ký tóc và nhắn tin salon | ✅ Hoàn thành |
 | **8** | **Dashboard Quản trị** | KPI ngày, doanh thu dự kiến/thực thu, lịch kế tiếp, trạng thái thợ; làm mới mỗi 15 giây | ✅ Hoàn thành |
-| **9** | **Quản lý lịch hẹn (Admin)** | Timeline theo thợ/giờ, khách vãng lai, đổi lịch, chặn giờ, trạng thái đang phục vụ/không đến, ghi nhận thanh toán | ✅ Hoàn thành |
+| **9** | **Quản lý lịch hẹn (Admin)** | Timeline theo thợ/giờ, tiếp nhận khách tại tiệm, đổi lịch, chặn giờ, trạng thái đang phục vụ/không đến, ghi nhận thanh toán | ✅ Hoàn thành |
 | **10** | **Quản lý Dịch vụ & Thợ** | Danh mục, giá ưu đãi, ảnh, quy trình; chức danh, kỹ năng, hoa hồng, đánh giá | ✅ Hoàn thành |
 | **11** | **Quản lý ca làm việc** | Ca theo ngày, ca lặp trong khoảng ngày, đơn nghỉ chờ duyệt và khóa giờ nghỉ | ✅ Hoàn thành |
 | **12** | **Bảo mật & Kiểm thử** | Múi giờ Asia/Ho_Chi_Minh, Rate limiting, không log ảnh, kiểm thử API quản trị | ✅ Hoàn thành |
@@ -87,19 +87,30 @@ hairmatch/
 
 ## 4. Tài khoản Demo sẵn có
 
+Các luồng mới: khách có thể chọn trả trước mô phỏng; dịch vụ hóa chất yêu cầu đặt cọc mô phỏng 50.000–100.000đ và chỉ được duyệt khi đã ghi nhận. Hai lần vắng mặt sẽ khóa đặt lịch online. Admin tạo tài khoản thợ trong mục Thợ tóc; thợ chỉ xem ca của mình và hoa hồng. Hồ sơ khách có điều khoản, quyền riêng tư và yêu cầu xóa tài khoản; lần đầu mở app có onboarding.
+
+Thanh toán chỉ ghi trạng thái trong dữ liệu demo, không tạo VietQR hay giao dịch thật. Cập nhật lịch và tin nhắn vẫn dùng polling; Socket.IO/Supabase Realtime chưa được tích hợp. Mini shop và chương trình giới thiệu bạn bè chưa được triển khai. Các văn bản điều khoản và quyền riêng tư trong app là bản nháp để hoàn thiện trước khi phát hành.
+
 Hệ thống đã nạp sẵn dữ liệu ban đầu phục vụ chạy thử và chấm bài:
 
 - **Tài khoản Quản trị viên (Chủ tiệm)**:
-  - Định danh: `0900000000` (hoặc email: `admin@hairmatch.vn`)
+  - Số điện thoại: `0900000000`
   - Mật khẩu: `Admin123!`
   - Vai trò: `admin` (toàn quyền quản trị salon, xem giá trị lịch hoàn thành, duyệt lịch hẹn)
 - **Tài khoản Khách hàng**:
-  - Định danh: `0911111111` (hoặc email: `customer@hairmatch.vn`)
+  - Số điện thoại: `0911111111`
   - Mật khẩu: `Customer123!`
   - Vai trò: `customer` (đặt lịch, AI tư vấn kiểu tóc, quản lý lịch của mình)
-- **Khách mẫu trong CRM**: `lan.anh@hairmatch.vn` (Lan Anh) và `hoang.nam@hairmatch.vn` (Hoàng Nam), cùng dùng mật khẩu `Customer123!`.
+- **Tài khoản Thợ demo**:
+  - Số điện thoại: `0900000204`
+  - Mật khẩu: `Barber123!`
+  - Vai trò: `barber` (xem ca cá nhân và hoa hồng)
+- **Khách mẫu trong CRM**: Lan Anh (`0922222222`) và Hoàng Nam (`0933333333`), cùng dùng mật khẩu `Customer123!`.
+- Chạy `cd backend; npm run seed:business-demo` để thêm khách mẫu và lịch kinh doanh trong 30 ngày trước/sau hôm nay.
+- Chạy `cd backend; npm run seed:customers-demo` để tạo 10 tài khoản khách demo có số điện thoại từ `0900000101` đến `0900000110`. Mật khẩu chung: `Customer123!`.
+- Năm tài khoản thợ dùng số từ `0900000201` đến `0900000205`; mật khẩu demo chung: `Barber123!`.
 
-*(Bạn cũng có thể bấm "Đăng ký tài khoản mới" trên app để tạo khách hàng mới bằng số điện thoại hoặc email bất kỳ).*
+Đăng ký khách chỉ cần tên đăng nhập, số điện thoại, mật khẩu và xác nhận mật khẩu. Quên mật khẩu sẽ đặt mật khẩu tạm mới trên backend rồi hiển thị trong app; không gửi SMS. Khi backend khởi động với Supabase, email cũ được gỡ khỏi bản ghi tài khoản; dữ liệu demo đã biết được gán lại số mẫu. Tài khoản cũ không có số điện thoại cần Admin nhập số thật ở mục Khách hàng trước khi đăng nhập bằng số đó.
 
 ---
 
@@ -172,7 +183,7 @@ Kiểm tra hiện tại: `npm test` chạy bộ test backend, `npm run typecheck
 
 - `GET /api/admin/appointments`: `date`, `from`, `to`, `barberId`, `status`, `q` (tên khách, điện thoại hoặc mã lịch).
 - `POST /api/admin/appointments` và `PATCH /api/admin/appointments/:id`: thêm lịch cho khách có tài khoản hoặc đổi lịch sang khung giờ hợp lệ còn trống.
-- `POST /api/admin/appointments` cũng nhận `walkInName`/`walkInPhone` cho khách vãng lai; `voucherCode` tùy chọn.
+- `POST /api/admin/appointments` cũng nhận `walkInName`/`walkInPhone` cho khách đến trực tiếp tại tiệm; `voucherCode` tùy chọn.
 - `PATCH /api/admin/appointments/:id/status`: trạng thái `in_progress`, `no_show`; khi hủy cần `cancelReason`, khi hoàn thành có thể ghi `payment.method` và `payment.amount`.
 - `GET /api/admin/dashboard-live`: KPI, lịch sắp tới và trạng thái thợ; giao diện tự gọi lại mỗi 15 giây.
 - `GET /api/admin/reports`: lọc `from`, `to`, phân tích doanh thu, thanh toán, thợ, dịch vụ, giờ đặt và khách quay lại.
@@ -188,7 +199,8 @@ Kiểm tra hiện tại: `npm test` chạy bộ test backend, `npm run typecheck
 - `POST /api/appointments`: nhận `serviceIds` (1–5 dịch vụ), `note`, `styleName`; tổng thời lượng được kiểm tra khi tìm slot và tạo lịch. `/api/availability` nhận `serviceIds` ngăn cách bằng dấu phẩy.
 - `PATCH /api/appointments/:id/reschedule`, `PATCH /api/appointments/:id/cancel`: khách tự đổi/hủy lịch trước giờ hẹn ít nhất 2 giờ; hủy cần `reason`.
 - `GET /api/vouchers/me`, `POST /api/loyalty/redeem`: mã cá nhân và đổi 100 điểm lấy mã 50.000đ; mỗi 10.000đ thực thu được 1 điểm.
-- `POST /api/support/messages`, `GET /api/support/messages/me`, `GET /api/admin/support/messages`, `PATCH /api/admin/support/messages/:id/reply`: hộp tin nhắn khách và phản hồi Admin.
+- `POST /api/support/messages`, `GET /api/support/messages/me`, `GET /api/admin/support/messages`: hộp thư khách, thợ và Admin.
+- `GET /api/customers/search?q=...`, `POST /api/messages`, `POST /api/messages/:threadId/reply`: Admin/thợ tìm khách theo tên/số điện thoại, chủ động nhắn và trao đổi trong hội thoại. Khách chỉ được trả lời sau khi Admin hoặc thợ đã nhắn trước; thư mới của khách gửi vào hộp thư salon.
 - `GET /api/barbers`: trả điểm đánh giá và portfolio chỉ gồm ảnh/kiểu tóc khách đã đồng ý chia sẻ.
 - `/api/availability` và đặt lịch khách chỉ cho phép 14 ngày tới. Sinh nhật tạo voucher cá nhân giảm 10%, hiệu lực 14 ngày.
 
@@ -199,7 +211,7 @@ Kiểm tra hiện tại: `npm test` chạy bộ test backend, `npm run typecheck
 - **Supabase**: Mỗi Supabase project đã có PostgreSQL; chạy `npx supabase login`, `npx supabase link --project-ref yyvzakjgcxjbneibpcly`, rồi `npx supabase db push --remote` để tạo các bảng HairMatch. Cấu hình `SUPABASE_URL` và `SUPABASE_SECRET_KEY` trong `backend/.env`; secret key chỉ dùng ở backend. Nếu để trống, server tiếp tục dùng in-memory repository.
 - **Bảo mật database**: Migration bật Row Level Security và thu hồi quyền của `anon`/`authenticated`; chỉ backend dùng server secret key truy cập các bảng HairMatch.
 - **Chưa có cổng thanh toán trực tuyến**: Admin ghi nhận số tiền thực thu và phương thức tiền mặt/chuyển khoản/thẻ sau khi phục vụ; ứng dụng chưa tự đối soát giao dịch.
-- **Khách thanh toán tại salon**: Màn xác nhận chưa cho chọn thanh toán trước vì chưa tích hợp cổng thanh toán. Đăng nhập OTP cần nhà cung cấp SMS; bản demo hiện dùng mật khẩu. Zalo/Messenger cần tài khoản chính thức của salon, còn nhắn tin trong app đã hoạt động.
+- **Khách thanh toán tại salon**: Màn xác nhận chưa cho chọn thanh toán trước vì chưa tích hợp cổng thanh toán. Xác thực dùng số điện thoại nội bộ; app không gửi SMS. Zalo/Messenger cần tài khoản chính thức của salon, còn nhắn tin trong app đã hoạt động.
 - **Push trên thiết bị thật**: Cần EAS project ID (`EXPO_PUBLIC_EAS_PROJECT_ID` trong `mobile/.env`) và thông tin ký/push credentials của Android/iOS. Web chỉ dùng hộp thông báo trong ứng dụng. Dịch vụ Expo nhận push không đồng nghĩa thiết bị đã hiển thị thành công; bản MVP chưa kiểm tra push receipts.
 - **Một chi nhánh**: Chưa có dữ liệu chi nhánh nên bộ lọc chi nhánh chưa xuất hiện.
 - **Tạo ảnh tóc mô phỏng**: AI hiện tại phản hồi tư vấn bằng văn bản chi tiết; giai đoạn sau có thể tích hợp mô hình Image-to-Image inpainting để ghép tóc trực tiếp vào khuôn mặt khách.

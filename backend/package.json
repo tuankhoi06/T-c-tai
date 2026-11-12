@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "seed:business-demo": "tsx src/seed-business-demo.ts",
+    "seed:customers-demo": "tsx src/seed-demo-customers.ts",
+    "seed:barbers-demo": "tsx src/seed-demo-barber-accounts.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

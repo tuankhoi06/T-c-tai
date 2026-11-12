@@ -1,10 +1,11 @@
 export interface User {
   id: string;
   name: string;
+  username?: string;
   phone?: string;
-  email?: string;
-  role: "customer" | "admin";
-  tier?: "silver" | "gold" | "vip";
+  role: "customer" | "admin" | "barber";
+  barberId?: string;
+  noShowCount?: number;
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: HairRecord[];
@@ -39,9 +40,21 @@ export interface Barber {
   title?: "master" | "top" | "junior";
   serviceIds?: string[] | null;
   commissionRate?: number;
+  accountPhone?: string | null;
   ratingAverage?: number | null;
   reviewCount?: number;
   portfolio?: { styleName: string; photo?: string; rating?: number }[];
+}
+
+export interface BarberAccount {
+  id: string;
+  phone: string;
+  barberId: string;
+  name: string;
+  barberName: string;
+  barberTitle?: "master" | "top" | "junior";
+  barberActive: boolean;
+  barberImageUrl?: string;
 }
 
 export type AppointmentStatus =
@@ -73,6 +86,10 @@ export interface Appointment {
   discountAmount?: number;
   paymentMethod?: "cash" | "transfer" | "card";
   amountPaid?: number;
+  paymentConfirmedAt?: string;
+  paymentConfirmedBy?: string;
+  commissionRateSnapshot?: number;
+  commissionAmount?: number;
   startedAt?: string;
   rating?: number;
   review?: string;
@@ -81,6 +98,9 @@ export interface Appointment {
   note?: string;
   styleName?: string;
   paymentChoice?: "salon" | "prepay";
+  depositRequired?: number;
+  simulatedPaid?: number;
+  simulatedPaymentReference?: string;
   aiHaircutName?: string;
   aiBarberNote?: string;
   cancelReason?: string;
@@ -98,7 +118,12 @@ export interface WorkSchedule {
 }
 
 export interface TimeBlock { id: string; barberId: string; date: string; startTime: string; endTime: string; reason: string }
-export interface LeaveRequest { id: string; barberId: string; from: string; to: string; reason: string; status: "pending" | "approved" | "rejected" }
+export interface LeaveRequest {
+  id: string; barberId: string; from: string; to: string; reason: string; status: "pending" | "approved" | "rejected";
+  leaveBarberName?: string;
+  leaveShifts?: { id: string; date: string; startTime: string; endTime: string }[];
+  leaveAppointments?: { id: string; customerId: string; customerNameSnapshot: string; serviceNameSnapshot: string; startAt: string; status: string; walkIn?: boolean }[];
+}
 export interface WeeklyShift { id: string; barberId: string; weekday: number; startTime: string; endTime: string; from: string; to: string }
 export interface Voucher { id: string; code: string; kind: "percent" | "fixed"; value: number; maxUses: number; usedCount: number; from: string; to: string; startTime?: string | null; endTime?: string | null; active: boolean; ownerId?: string }
 export interface Notification { id: string; customerId: string; title: string; body: string; createdAt: string; read: boolean; kind: "promotion" | "reminder" | "manual" | "booking" | "review_invite" | "loyalty" | "care" | "birthday"; appointmentId?: string; stage?: "two_hours" | "thirty_minutes" }
@@ -132,8 +157,13 @@ export interface Preferences {
 
 export interface ConsultationResult {
   mode: "mock" | "live";
+  provider?: string;
+  durationMs?: number;
   imageAssessment: {
     suitable: boolean;
+    subjectType: "human_face" | "animal" | "object" | "uncertain";
+    faceFrontal: boolean;
+    faceClear: boolean;
     message: string;
   };
   faceShapeEstimate: string;

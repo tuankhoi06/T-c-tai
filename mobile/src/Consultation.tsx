@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, Image, ImageBackground, Switch, Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { api } from "./api";
@@ -19,6 +19,7 @@ interface ConsultationProps {
 }
 
 export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
+  const [aiStatus, setAiStatus] = useState<{ aiMode?: string; aiProvider?: string } | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
@@ -26,6 +27,18 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ConsultationResult | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const refreshAIStatus = () => {
+      void api<{ aiMode?: string; aiProvider?: string }>("/health")
+        .then((status) => { if (active) setAiStatus(status); })
+        .catch(() => { if (active) setAiStatus({ aiMode: "unavailable" }); });
+    };
+    refreshAIStatus();
+    const timer = setInterval(refreshAIStatus, 15_000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
   async function pickImage() {
     setError("");
@@ -140,6 +153,17 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
       <Text style={styles.muted}>
         Chỉ cần chụp hoặc tải ảnh khuôn mặt trực diện rõ nét. AI Vision sẽ tự nhìn tỷ lệ khuôn mặt và mái tóc hiện tại để gợi ý 3 kiểu tóc phù hợp nhất.
       </Text>
+      <Text style={[styles.muted, { color: aiStatus?.aiMode === "live" ? colors.success : colors.danger }]}>
+        {aiStatus?.aiMode === "live"
+          ? `Đang dùng AI thật: ${aiStatus.aiProvider || "nhà cung cấp chưa rõ"}.`
+          : aiStatus?.aiMode === "mock"
+            ? "Backend đang ở chế độ mô phỏng: không đọc ảnh và không thể tư vấn thật."
+            : "Chưa kết nối được backend AI."}
+      </Text>
+      <Card>
+        <Text style={styles.subtitle}>Chính sách riêng tư</Text>
+        <Text style={styles.muted}>Ảnh khuôn mặt được gửi tới dịch vụ phân tích để tạo gợi ý, chỉ xử lý trong phiên yêu cầu và không lưu vào hồ sơ salon. Ảnh đánh giá không được chia sẻ vào bộ sưu tập của salon nếu bạn chưa đồng ý.</Text>
+      </Card>
 
       <ErrorText message={error} />
 
@@ -239,7 +263,8 @@ export function Consultation({ onBookWithHaircut }: ConsultationProps = {}) {
               }}
             >
               <Text style={{ color: colors.dark, fontSize: 12, fontWeight: "700" }}>
-                Mode: {result.mode.toUpperCase()}
+                {result.provider || (result.mode === "live" ? "AI trực tiếp" : "Mô phỏng")}
+                {typeof result.durationMs === "number" ? ` · ${(result.durationMs / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} giây` : ` · ${result.mode.toUpperCase()}`}
               </Text>
             </View>
           </View>

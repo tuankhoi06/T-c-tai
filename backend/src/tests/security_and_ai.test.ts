@@ -86,7 +86,7 @@ describe("Xử lý AI & Kiểm tra tính hợp lệ (AI & Input Validation)", ()
     });
   });
 
-  it("Mock AI trả về đầy đủ 3 gợi ý kiểu tóc và disclaimer an toàn", async () => {
+  it("Mock AI không giả vờ đã phân tích ảnh và không đưa gợi ý tóc", async () => {
     const consultation = new ConsultationService(new MockProvider());
     // 1x1 png buffer for sharp processing
     const validPng = Buffer.from(
@@ -109,10 +109,41 @@ describe("Xử lý AI & Kiểm tra tính hợp lệ (AI & Input Validation)", ()
     const result = await consultation.consult(validPng, preferences);
 
     expect(result.mode).toBe("mock");
-    expect(result.haircutRecommendations).toHaveLength(3);
+    expect(result.provider).toBe("Mô phỏng");
+    expect(result.imageAssessment.suitable).toBe(false);
+    expect(result.imageAssessment.subjectType).toBe("uncertain");
+    expect(result.haircutRecommendations).toHaveLength(0);
+    expect(result.imageAssessment.message).toContain("không phân tích hình ảnh");
     expect(result.disclaimer).toContain("Gợi ý AI mang tính tham khảo");
     expect(result.colorAdvice.recommendation).toBeDefined();
     expect(result.permAdvice.recommendation).toBeDefined();
+  });
+
+  it("Từ chối ảnh động vật kể cả khi nhà cung cấp AI đánh dấu nhầm là phù hợp", async () => {
+    const validPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    const preferences = preferencesSchema.parse({});
+    const mocked = await new MockProvider().consult(validPng, preferences);
+    const provider = {
+      consult: async () => ({
+        ...mocked,
+        imageAssessment: {
+          suitable: true,
+          subjectType: "animal" as const,
+          faceFrontal: true,
+          faceClear: true,
+          message: "Ảnh phù hợp"
+        }
+      })
+    };
+    const consultation = new ConsultationService(provider, "live");
+    const result = await consultation.consult(validPng, preferences);
+
+    expect(result.imageAssessment.suitable).toBe(false);
+    expect(result.imageAssessment.subjectType).toBe("animal");
+    expect(result.haircutRecommendations).toHaveLength(0);
   });
 
   it("Validate preferences schema", () => {

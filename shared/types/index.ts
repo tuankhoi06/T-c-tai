@@ -1,5 +1,5 @@
 
-export type Role = "customer" | "admin";
+export type Role = "customer" | "admin" | "barber";
 
 export type AppointmentStatus =
   | "pending"
@@ -16,12 +16,13 @@ export interface User {
   email?: string;
   passwordHash?: string;
   role: Role;
-  tier?: "silver" | "gold" | "vip";
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: { id: string; date: string; style: string; color?: string; formula?: string; note?: string }[];
   birthday?: string;
   loyaltyPoints?: number;
+  barberId?: string;
+  noShowCount?: number;
 }
 
 export type PublicUser = Omit<User, "passwordHash">;
@@ -87,6 +88,8 @@ export interface Appointment {
   discountAmount?: number;
   paymentMethod?: "cash" | "transfer" | "card";
   amountPaid?: number;
+  commissionRateSnapshot?: number;
+  commissionAmount?: number;
   startedAt?: string;
   rating?: number;
   review?: string;
@@ -95,6 +98,9 @@ export interface Appointment {
   note?: string;
   styleName?: string;
   paymentChoice?: "salon" | "prepay";
+  depositRequired?: number;
+  simulatedPaid?: number;
+  simulatedPaymentReference?: string;
   aiHaircutName?: string;
   aiBarberNote?: string;
   cancelReason?: string;

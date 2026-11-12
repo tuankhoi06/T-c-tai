@@ -1,5 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
+
+dotenv.config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../.env") });
 
 const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
@@ -7,6 +11,7 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().default(""),
   GEMINI_API_KEY: z.string().default(""),
   AI_MODEL: z.string().default(""),
+  STORAGE_MODE: z.enum(["auto", "memory"]).default("auto"),
   CORS_ORIGINS: z.string().default(""),
   SUPABASE_URL: z.union([z.literal(""), z.string().url()]).default(""),
   SUPABASE_SECRET_KEY: z.string().default("")

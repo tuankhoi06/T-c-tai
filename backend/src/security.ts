@@ -33,12 +33,18 @@ export async function verifyPassword(
 }
 
 export function publicUser(user: User): PublicUser {
-  return { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role,
-    tier: user.tier, birthday: user.birthday, loyaltyPoints: user.loyaltyPoints || 0,
+  return { id: user.id, name: user.name, username: user.username, phone: user.phone, role: user.role,
+    birthday: user.birthday, loyaltyPoints: user.loyaltyPoints || 0,
+    barberId: user.barberId, noShowCount: user.noShowCount || 0,
     hairHistory: user.hairHistory?.map(({ id, date, style, color, note }) => ({ id, date, style, color, note })) };
 }
 
 export function createToken(): string {
   return randomBytes(32).toString("hex");
+}
+
+export function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.startsWith("84") ? `0${digits.slice(2)}` : digits;
 }
 

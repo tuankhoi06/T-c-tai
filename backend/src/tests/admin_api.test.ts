@@ -21,7 +21,7 @@ describe("Admin API", () => {
     server = createApp(repo).listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server.once("listening", resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api`;
-    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: "0900000000", password: "Admin123!" }) });
+    const login = await fetch(`${base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "admin@hairmatch.vn", password: "Admin123!" }) });
     adminToken = (await login.json()).token;
   });
   afterEach(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); });
@@ -198,7 +198,7 @@ describe("Admin API", () => {
   });
 
   it("CRM giữ ghi chú riêng cho admin, đánh giá và thông báo trong app", async () => {
-    const updated = await request("/admin/customers/customer-demo", "PATCH", { tier: "vip", internalNote: "Da đầu nhạy cảm", blacklisted: true });
+    const updated = await request("/admin/customers/customer-demo", "PATCH", { internalNote: "Da đầu nhạy cảm", blacklisted: true });
     expect(updated.data.internalNote).toBe("Da đầu nhạy cảm");
     const me = (await request("/me", "GET", undefined, "demo-customer-token")).data;
     expect(me.internalNote).toBeUndefined();
