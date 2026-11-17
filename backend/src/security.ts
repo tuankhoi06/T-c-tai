@@ -34,8 +34,7 @@ export async function verifyPassword(
 
 export function publicUser(user: User): PublicUser {
   return { id: user.id, name: user.name, username: user.username, phone: user.phone, role: user.role,
-    birthday: user.birthday, loyaltyPoints: user.loyaltyPoints || 0,
-    barberId: user.barberId, noShowCount: user.noShowCount || 0,
+    barberId: user.barberId,
     hairHistory: user.hairHistory?.map(({ id, date, style, color, note }) => ({ id, date, style, color, note })) };
 }
 

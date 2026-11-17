@@ -159,7 +159,7 @@ export function mergeDuplicateCustomerAdminThreads(repo: Repository) {
       body: first.body,
       createdAt: first.createdAt,
       updatedAt: last.createdAt,
-      participantIds: [...new Set([...group.flatMap((item) => item.participantIds || []), ...(admin ? [admin.id] : []), byTime[0].customerId])],
+      participantIds: [...new Set([...group.flatMap((item) => item.participantIds || []), ...(admin ? [admin.id] : []), byTime[0].customerId!])],
       readBy: latest.readBy || [],
       messages: uniqueEntries,
       ...(last.senderRole === "customer" ? { reply: undefined, repliedAt: undefined } : { reply: last.body, repliedAt: last.createdAt })

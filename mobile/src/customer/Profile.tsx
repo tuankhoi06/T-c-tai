@@ -3,7 +3,7 @@ import { Image, Linking, Modal, Pressable, ScrollView, Text, View } from "react-
 import { api } from "../api";
 import type { Appointment, User, Voucher } from "../types";
 import { Button, Card, ErrorText, Field, colors, money, styles } from "../ui";
-import { DateField, FormModal } from "../admin/components";
+import { FormModal } from "../admin/components";
 import { demoBranches, mapsUrlFor, salonPhone } from "./salon";
 
 export function CustomerProfile({ user, appointments, vouchers, onUserUpdated, onLogout }: {
@@ -11,7 +11,6 @@ export function CustomerProfile({ user, appointments, vouchers, onUserUpdated, o
   onUserUpdated: (user: User, voucher?: Voucher) => void; onLogout: () => void;
 }) {
   const [name, setName] = useState(user.name);
-  const [birthday, setBirthday] = useState(user.birthday || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -21,17 +20,9 @@ export function CustomerProfile({ user, appointments, vouchers, onUserUpdated, o
   async function save() {
     setBusy(true); setError(""); setMessage("");
     try {
-      const updated = await api<User>("/me", { method: "PATCH", body: { name: name.trim(), ...(birthday ? { birthday } : {}) } });
+      const updated = await api<User>("/me", { method: "PATCH", body: { name: name.trim() } });
       onUserUpdated(updated); setMessage("Đã lưu hồ sơ.");
     } catch (err: any) { setError(err.message || "Không lưu được hồ sơ."); }
-    finally { setBusy(false); }
-  }
-  async function redeem() {
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const result = await api<{ user: User; voucher: Voucher }>("/loyalty/redeem", { method: "POST" });
-      onUserUpdated(result.user, result.voucher); setMessage(`Đã đổi mã ${result.voucher.code}.`);
-    } catch (err: any) { setError(err.message || "Không đổi được điểm."); }
     finally { setBusy(false); }
   }
   function requestDeletion() {
@@ -52,12 +43,8 @@ export function CustomerProfile({ user, appointments, vouchers, onUserUpdated, o
   return <View style={{ gap: 12 }}>
     <Text style={styles.subtitle}>Hồ sơ của tôi</Text><ErrorText message={error} />{!!message && <Text style={{ color: colors.gold }}>{message}</Text>}
     <Card><Text style={styles.subtitle}>{user.name}</Text><Text style={styles.muted}>{user.phone || "Chưa có số điện thoại"}</Text>
-      <Text style={styles.muted}>Số lần vắng mặt: {user.noShowCount || 0}/2{(user.noShowCount || 0) >= 2 ? " · Gọi hotline để đặt lịch" : ""}</Text>
-      <Text style={[styles.subtitle, { color: colors.gold }]}>{user.loyaltyPoints || 0} điểm thưởng</Text><Text style={styles.muted}>Mỗi 10.000đ thanh toán tại salon được 1 điểm. Đổi 100 điểm lấy mã giảm 50.000đ.</Text>
-      <Button title="Đổi 100 điểm" disabled={busy || (user.loyaltyPoints || 0) < 100} secondary onPress={() => void redeem()} />
     </Card>
     <Card><Text style={styles.subtitle}>Thông tin cá nhân</Text><Field label="Họ và tên" value={name} onChange={setName} /><Text style={styles.muted}>Số điện thoại: {user.phone || "Chưa có"}</Text>
-      <DateField label="Ngày sinh (nhận mã ưu đãi sinh nhật)" value={birthday} onChange={setBirthday} />
       <Button title={busy ? "Đang lưu..." : "Lưu hồ sơ"} disabled={busy || name.trim().length < 2} onPress={() => void save()} />
     </Card>
     <Card style={{ gap: 11 }}>

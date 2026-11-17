@@ -290,15 +290,6 @@ describe("Admin API", () => {
     expect((await request("/vouchers/me", "GET", undefined, "demo-customer-token")).data.map((voucher: any) => voucher.code)).toContain(redeemed.data.voucher.code);
   });
 
-  it("tạo ưu đãi sinh nhật cá nhân một lần mỗi năm", async () => {
-    const user = repo.users.get("customer-demo")!;
-    repo.users.put({ ...user, birthday: DateTime.now().setZone(SHOP_ZONE).toISODate()! });
-    const notices = await request("/notifications/me", "GET", undefined, "demo-customer-token");
-    expect(notices.data.filter((item: any) => item.kind === "birthday")).toHaveLength(1);
-    expect((await request("/vouchers/me", "GET", undefined, "demo-customer-token")).data.some((item: any) => item.ownerId === "customer-demo" && item.value === 10)).toBe(true);
-    expect((await request("/notifications/me", "GET", undefined, "demo-customer-token")).data.filter((item: any) => item.kind === "birthday")).toHaveLength(1);
-  });
-
   it("khách nhắn hỗ trợ, admin trả lời đúng người", async () => {
     expect((await request("/admin/support/messages", "GET", undefined, "demo-customer-token")).status).toBe(403);
     const sent = await request("/support/messages", "POST", { body: "Tôi muốn hỏi về lịch cắt" }, "demo-customer-token");

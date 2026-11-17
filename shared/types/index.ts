@@ -19,7 +19,6 @@ export interface User {
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: { id: string; date: string; style: string; color?: string; formula?: string; note?: string }[];
-  birthday?: string;
   loyaltyPoints?: number;
   barberId?: string;
   noShowCount?: number;

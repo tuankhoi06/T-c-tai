@@ -9,7 +9,6 @@ export interface User {
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: HairRecord[];
-  birthday?: string;
   loyaltyPoints?: number;
 }
 
@@ -97,10 +96,10 @@ export interface Appointment {
   portfolioConsent?: boolean;
   note?: string;
   styleName?: string;
-  paymentChoice?: "salon" | "prepay";
+  paymentChoice?: "salon";
   depositRequired?: number;
-  simulatedPaid?: number;
-  simulatedPaymentReference?: string;
+  depositSimulationConfirmed?: boolean;
+  depositSimulationAmount?: number;
   aiHaircutName?: string;
   aiBarberNote?: string;
   cancelReason?: string;
@@ -113,6 +112,8 @@ export interface WorkSchedule {
   date: string;
   startTime: string;
   endTime: string;
+  lunchStartTime?: string;
+  lunchEndTime?: string;
   sourceWeeklyId?: string;
   activeAppointmentCount?: number;
 }
@@ -120,18 +121,19 @@ export interface WorkSchedule {
 export interface TimeBlock { id: string; barberId: string; date: string; startTime: string; endTime: string; reason: string }
 export interface LeaveRequest {
   id: string; barberId: string; from: string; to: string; reason: string; status: "pending" | "approved" | "rejected";
+  kind?: "weekly_off" | "emergency"; dates?: string[];
   leaveBarberName?: string;
   leaveShifts?: { id: string; date: string; startTime: string; endTime: string }[];
   leaveAppointments?: { id: string; customerId: string; customerNameSnapshot: string; serviceNameSnapshot: string; startAt: string; status: string; walkIn?: boolean }[];
 }
 export interface WeeklyShift { id: string; barberId: string; weekday: number; startTime: string; endTime: string; from: string; to: string }
 export interface Voucher { id: string; code: string; kind: "percent" | "fixed"; value: number; maxUses: number; usedCount: number; from: string; to: string; startTime?: string | null; endTime?: string | null; active: boolean; ownerId?: string }
-export interface Notification { id: string; customerId: string; title: string; body: string; createdAt: string; read: boolean; kind: "promotion" | "reminder" | "manual" | "booking" | "review_invite" | "loyalty" | "care" | "birthday"; appointmentId?: string; stage?: "two_hours" | "thirty_minutes" }
+export interface Notification { id: string; customerId: string; title: string; body: string; createdAt: string; read: boolean; kind: "promotion" | "reminder" | "manual" | "booking" | "review_invite" | "loyalty" | "care"; appointmentId?: string; stage?: "two_hours" | "thirty_minutes" }
 
 export interface AdminDashboard {
   todayTotal: number; inService: number; expectedRevenue: number; paidRevenue: number; cancellationRate: number;
   upcoming: Appointment[];
-  stylistStatus: { barberId: string; name: string; status: "available" | "busy" | "off"; appointment?: Appointment }[];
+  stylistStatus: { barberId: string; name: string; status: "available" | "busy" | "off" | "lunch"; appointment?: Appointment }[];
 }
 
 export interface AdminReport {

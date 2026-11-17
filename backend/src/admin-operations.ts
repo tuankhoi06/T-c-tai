@@ -3,7 +3,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { DateTime } from "luxon";
 import { z } from "zod";
 import { SHOP_ZONE } from "./config.js";
-import { appointmentCommission, BookingService, isAppointmentPaymentConfirmed, overlaps, scheduleBounds, validDate } from "./booking.js";
+import { appointmentCommission, BookingService, isAppointmentPaymentConfirmed, leaveDates, overlaps, rotatingLunch, scheduleBounds, validDate } from "./booking.js";
 import { ensure } from "./errors.js";
 import type { Appointment, TimeBlock, User } from "./models.js";
 import type { Repository } from "./repository.js";
@@ -19,20 +19,28 @@ const shopDay = (appointment: Appointment) => DateTime.fromISO(appointment.start
 const sum = (items: Appointment[], get: (item: Appointment) => number) => items.reduce((total, item) => total + get(item), 0);
 
 export function registerAdminOperations(app: Express, repo: Repository) {
-  const leaveImpact = (leave: { barberId: string; from: string; to: string }) => ({
+  const leaveImpact = (leave: { barberId: string; from: string; to: string; dates?: string[] }) => {
+    const daysOff = new Set(leaveDates(leave));
+    return {
     leaveBarberName: repo.barbers.get(leave.barberId)?.name || "Thợ",
-    leaveShifts: repo.schedules.all().filter((item) => item.barberId === leave.barberId && item.date >= leave.from && item.date <= leave.to)
+    leaveCoverage: [...daysOff].sort().map((date) => {
+      const scheduledBarbers = new Set(repo.schedules.all().filter((item) => item.date === date).map((item) => item.barberId));
+      const losesShift = scheduledBarbers.has(leave.barberId);
+      return { date, scheduledCount: scheduledBarbers.size, remainingCount: Math.max(0, scheduledBarbers.size - Number(losesShift)) };
+    }),
+    leaveShifts: repo.schedules.all().filter((item) => item.barberId === leave.barberId && daysOff.has(item.date))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
       .map(({ id, date, startTime, endTime }) => ({ id, date, startTime, endTime })),
-    leaveAppointments: repo.appointments.all().filter((item) => item.barberId === leave.barberId && active(item) && shopDay(item) >= leave.from && shopDay(item) <= leave.to)
+    leaveAppointments: repo.appointments.all().filter((item) => item.barberId === leave.barberId && active(item) && daysOff.has(shopDay(item)))
       .sort((a, b) => a.startAt.localeCompare(b.startAt))
       .map(({ id, customerId, customerNameSnapshot, serviceNameSnapshot, startAt, status, walkIn }) => ({ id, customerId, customerNameSnapshot, serviceNameSnapshot, startAt, status, walkIn }))
-  });
+    };
+  };
   app.get("/api/admin/support/messages", (_req, res) => {
     ensure(res.locals.user.role === "admin", 403, "Chỉ quản trị viên mới được xem hộp thư chung.");
     const adminId = res.locals.user.id as string;
     res.json(repo.supportMessages.all().filter((item) => canSeeSupportThread(item, res.locals.user))
-      .map((item) => ({ ...supportThreadView(item, repo, adminId), ...(item.leaveRequestId ? leaveImpact({ barberId: repo.leaves.get(item.leaveRequestId)?.barberId || "", from: item.leaveFrom || "", to: item.leaveTo || "" }) : {}) }))
+      .map((item) => ({ ...supportThreadView(item, repo, adminId), ...(item.leaveRequestId ? leaveImpact({ barberId: repo.leaves.get(item.leaveRequestId)?.barberId || "", from: item.leaveFrom || "", to: item.leaveTo || "", dates: item.leaveDates }) : {}) }))
       .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt)));
   });
   app.patch("/api/admin/support/messages/:id/reply", wrap((req, res) => {
@@ -58,12 +66,17 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const stylistStatus = repo.barbers.all().filter((barber) => barber.active).map((barber) => {
       const busy = todayItems.find((item) => item.barberId === barber.id && active(item) &&
         DateTime.fromISO(item.startAt) <= now && (item.status === "in_progress" || DateTime.fromISO(item.endAt) > now));
-      const onLeave = repo.leaves.all().some((leave) => leave.barberId === barber.id && leave.status === "approved" && today >= leave.from && today <= leave.to);
-      const onShift = repo.schedules.all().some((schedule) => schedule.barberId === barber.id && schedule.date === today &&
+      const onLeave = repo.leaves.all().some((leave) => leave.barberId === barber.id && leave.status === "approved" && leaveDates(leave).includes(today));
+      const currentShift = repo.schedules.all().find((schedule) => schedule.barberId === barber.id && schedule.date === today &&
         scheduleBounds(schedule).start <= now && scheduleBounds(schedule).end > now);
+      const onShift = !!currentShift;
+      const lunch = currentShift ? (currentShift.lunchStartTime && currentShift.lunchEndTime ? currentShift : rotatingLunch(
+        repo.barbers.all().filter((item) => item.active).findIndex((item) => item.id === barber.id), currentShift.startTime, currentShift.endTime
+      )) : undefined;
+      const onLunch = !!(lunch?.lunchStartTime && lunch.lunchEndTime && now.toFormat("HH:mm") >= lunch.lunchStartTime && now.toFormat("HH:mm") < lunch.lunchEndTime);
       const onBreak = repo.blocks.all().some((block) => block.barberId === barber.id && block.date === today &&
         scheduleBounds(block).start <= now && scheduleBounds(block).end > now);
-      return { barberId: barber.id, name: barber.name, status: onLeave || !onShift || onBreak ? "off" : busy ? "busy" : "available", appointment: busy };
+      return { barberId: barber.id, name: barber.name, status: onLeave || !onShift || onBreak ? "off" : busy ? "busy" : onLunch ? "lunch" : "available", appointment: busy };
     });
     const cancelled = todayItems.filter((item) => item.status === "cancelled" || item.status === "no_show").length;
     res.json({
@@ -156,7 +169,7 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const body = leaveSchema.parse(req.body);
     ensure(repo.barbers.get(body.barberId), 404, "Không tìm thấy thợ.");
     ensure(body.from <= body.to, 400, "Khoảng ngày không hợp lệ.");
-    const leave = { id: randomUUID(), ...body, status: "pending" as const };
+    const leave = { id: randomUUID(), ...body, kind: "emergency" as const, status: "pending" as const };
     repo.leaves.put(leave); res.status(201).json(leave);
   }));
   app.patch("/api/admin/leaves/:id", wrap((req, res) => {
@@ -165,8 +178,15 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const { status, confirmCancelAppointments } = z.object({ status: z.enum(["approved", "rejected"]), confirmCancelAppointments: z.boolean().optional().default(false) }).parse(req.body);
     ensure(leave.status === "pending", 409, "Đơn nghỉ này đã được xử lý.");
     const barber = repo.barbers.get(leave.barberId);
-    const affectedAppointments = repo.appointments.all().filter((item) => item.barberId === leave.barberId && active(item) && shopDay(item) >= leave.from && shopDay(item) <= leave.to);
-    const affectedSchedules = repo.schedules.all().filter((item) => item.barberId === leave.barberId && item.date >= leave.from && item.date <= leave.to);
+    const daysOff = new Set(leaveDates(leave));
+    if (status === "approved" && leave.kind === "weekly_off") {
+      for (const day of daysOff) {
+        const sameDayApproved = repo.leaves.all().filter((item) => item.id !== leave.id && item.kind === "weekly_off" && item.status === "approved" && leaveDates(item).includes(day)).length;
+        ensure(sameDayApproved < 2, 409, `Ngày ${day} đã đủ 2 thợ nghỉ. Hãy điều chỉnh đơn trước khi duyệt.`);
+      }
+    }
+    const affectedAppointments = repo.appointments.all().filter((item) => item.barberId === leave.barberId && active(item) && daysOff.has(shopDay(item)));
+    const affectedSchedules = repo.schedules.all().filter((item) => item.barberId === leave.barberId && daysOff.has(item.date));
     if (status === "approved" && affectedAppointments.length) ensure(confirmCancelAppointments, 409,
       `Có ${affectedAppointments.length} lịch khách sẽ bị hủy. Hãy xem lại danh sách và xác nhận duyệt nghỉ.`);
     const admin: User = res.locals.user;
@@ -202,9 +222,10 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const updated = { ...leave, status }; repo.leaves.put(updated);
     const thread = repo.supportMessages.all().find((item) => item.leaveRequestId === leave.id);
     if (thread) {
+      const leaveLabel = leave.kind === "weekly_off" ? leaveDates(leave).join(", ") : `${leave.from} → ${leave.to}`;
       const notice = status === "approved"
-        ? `Đơn xin nghỉ ${leave.from} → ${leave.to} đã được duyệt. Đã gỡ ${affectedSchedules.length} ca, hủy ${affectedAppointments.length} lịch khách và gửi lời xin lỗi riêng cho ${apologyNotices.length} khách có tài khoản bị ảnh hưởng.`
-        : `Đơn xin nghỉ ${leave.from} → ${leave.to} đã bị từ chối.`;
+        ? `Đơn xin nghỉ ${leaveLabel} đã được duyệt. Đã gỡ ${affectedSchedules.length} ca, hủy ${affectedAppointments.length} lịch khách và gửi lời xin lỗi riêng cho ${apologyNotices.length} khách có tài khoản bị ảnh hưởng.`
+        : `Đơn xin nghỉ ${leaveLabel} đã bị từ chối.`;
       repo.supportMessages.put({ ...appendSupportEntry({ ...thread, leaveRequestStatus: status }, res.locals.user, notice), leaveRequestStatus: status });
     }
     if (apologyNotices.length) void sendPush(repo, apologyNotices);
@@ -225,7 +246,9 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const generated = [];
     for (let day = from; day <= to; day = day.plus({ days: 1 })) {
       if (day.weekday !== body.weekday) continue;
-      const schedule = { id: randomUUID(), barberId: body.barberId, date: day.toISODate()!, startTime: body.startTime, endTime: body.endTime, sourceWeeklyId: "" };
+      const roster = repo.barbers.all().filter((barber) => barber.active);
+      const lunch = rotatingLunch(roster.findIndex((barber) => barber.id === body.barberId), body.startTime, body.endTime);
+      const schedule = { id: randomUUID(), barberId: body.barberId, date: day.toISODate()!, startTime: body.startTime, endTime: body.endTime, ...lunch, sourceWeeklyId: "" };
       const bounds = scheduleBounds(schedule);
       ensure(!repo.schedules.all().some((other) => {
         if (other.barberId !== schedule.barberId || other.date !== schedule.date) return false;
@@ -256,9 +279,11 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     let createdCount = 0;
     let skippedLeaveCount = 0;
     let skippedExistingCount = 0;
+    const roster = repo.barbers.all().filter((barber) => barber.active);
+    const lunchFor = (barberId: string, startTime: string, endTime: string) => rotatingLunch(roster.findIndex((barber) => barber.id === barberId), startTime, endTime);
     const templates = [
       ...rules.map((rule) => ({ barberId: rule.barberId, weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime, from: rule.from, to: rule.to, sourceWeeklyId: rule.id })),
-      ...fallbackBarbers.flatMap((barber) => [1, 2, 3, 4, 5, 6].map((weekday) => ({ barberId: barber.id, weekday, startTime: "09:00", endTime: "18:00", from: body.from, to: body.to, sourceWeeklyId: undefined as string | undefined })))
+      ...fallbackBarbers.flatMap((barber) => [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ barberId: barber.id, weekday, startTime: "09:00", endTime: "19:00", from: body.from, to: body.to, sourceWeeklyId: undefined as string | undefined })))
     ];
     for (const rule of templates) {
       const ruleFrom = DateTime.fromISO(rule.from, { zone: SHOP_ZONE });
@@ -268,9 +293,9 @@ export function registerAdminOperations(app: Express, repo: Repository) {
       for (let day = start; day <= end; day = day.plus({ days: 1 })) {
         if (day.weekday !== rule.weekday) continue;
         const dayKey = day.toISODate()!;
-        const leave = repo.leaves.all().some((item) => item.barberId === rule.barberId && item.status !== "rejected" && item.from <= dayKey && item.to >= dayKey);
+        const leave = repo.leaves.all().some((item) => item.barberId === rule.barberId && item.status === "approved" && leaveDates(item).includes(dayKey));
         if (leave) { skippedLeaveCount += 1; continue; }
-        const schedule = { id: randomUUID(), barberId: rule.barberId, date: dayKey, startTime: rule.startTime, endTime: rule.endTime, sourceWeeklyId: rule.sourceWeeklyId };
+        const schedule = { id: randomUUID(), barberId: rule.barberId, date: dayKey, startTime: rule.startTime, endTime: rule.endTime, ...lunchFor(rule.barberId, rule.startTime, rule.endTime), sourceWeeklyId: rule.sourceWeeklyId };
         const bounds = scheduleBounds(schedule);
         const overlapsExisting = repo.schedules.all().some((other) => {
           if (other.barberId !== schedule.barberId || other.date !== schedule.date) return false;
@@ -349,7 +374,8 @@ export function registerAdminOperations(app: Express, repo: Repository) {
     const userId = res.locals.user.id;
     const due = createDueReminders(repo);
     if (due.length) void sendPush(repo, due);
-    res.json(repo.notifications.all().filter((item) => item.customerId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    res.json(repo.notifications.all().filter((item) => item.customerId === userId && item.kind !== "loyalty")
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   });
   app.patch("/api/notifications/:id/read", wrap((req, res) => {
     const notice = repo.notifications.get(req.params.id);

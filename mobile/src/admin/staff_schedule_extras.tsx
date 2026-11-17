@@ -13,7 +13,7 @@ export function StaffScheduleExtras({ active, barbers, onChanged }: { active: bo
   const [barberId, setBarberId] = useState("");
   const [weekday, setWeekday] = useState("1");
   const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("18:00");
+  const [endTime, setEndTime] = useState("19:00");
   const [from, setFrom] = useState(shopDate(31));
   const [to, setTo] = useState(shopDate(90));
   const [busy, setBusy] = useState(false);
@@ -33,7 +33,7 @@ export function StaffScheduleExtras({ active, barbers, onChanged }: { active: bo
       <Text style={{ color: colors.gold, fontWeight: "800" }}>{expanded ? "Thu gọn －" : "Mở ＋"}</Text>
     </Pressable>
     {expanded && <>
-      <Text style={styles.muted}>Tạo các ca lặp trong khoảng tối đa 90 ngày. Ngày đã có ca chồng lấn sẽ bị từ chối.</Text>
+      <Text style={styles.muted}>Tạo ca lặp tối đa 90 ngày. Ca 09:00–19:00 được tự chia giờ trưa theo thứ tự thợ; cuối tuần vẫn xếp ca.</Text>
       <Card><ComboBox label="Thợ" value={barberId} onChange={setBarberId} options={options} />
         <Text style={styles.muted}>Thứ trong tuần</Text><Choice value={weekday} onChange={setWeekday} options={weekdays} />
         <DateField label="Từ ngày" value={from} onChange={setFrom} /><DateField label="Đến ngày" value={to} onChange={setTo} />

@@ -33,8 +33,11 @@ export type SupportMessage = {
   leaveRequestStatus?: "pending" | "approved" | "rejected";
   leaveFrom?: string;
   leaveTo?: string;
+  leaveKind?: "weekly_off" | "emergency";
+  leaveDates?: string[];
   leaveReason?: string;
   leaveBarberName?: string;
+  leaveCoverage?: { date: string; scheduledCount: number; remainingCount: number }[];
   leaveShifts?: { id: string; date: string; startTime: string; endTime: string }[];
   leaveAppointments?: { id: string; customerId: string; customerNameSnapshot: string; serviceNameSnapshot: string; startAt: string; status: string; walkIn?: boolean }[];
   readBy?: string[];
@@ -222,9 +225,10 @@ export function SupportInbox({ messages, contacts = [], viewerRole, viewerId, on
   const thread = selected ? <View style={{ flex: 1, minWidth: 0, gap: 12, padding: wide ? 16 : 0 }}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10, borderBottomWidth: 1, borderColor: colors.border }}><Avatar name={counterpart(selected, viewerRole)} size={42} /><View style={{ flex: 1 }}><Text style={styles.subtitle}>{counterpart(selected, viewerRole)}</Text>{staff && !!(selected.customerPhone || selected.contactPhone) && <Text style={styles.muted}>{selected.customerPhone || selected.contactPhone}</Text>}<Text style={styles.muted}>{selected.appointmentId ? "Liên hệ từ lịch " + selected.appointmentId.slice(0, 8).toUpperCase() : selectedEntries.length + " tin nhắn"}</Text></View></View>
     {!!selected.leaveRequestId && <Card style={{ borderColor: selected.leaveRequestStatus === "pending" ? colors.gold : selected.leaveRequestStatus === "approved" ? colors.success : colors.danger }}>
-      <Text style={styles.subtitle}>Đơn xin nghỉ · {selected.leaveFrom} → {selected.leaveTo}</Text>
+      <Text style={styles.subtitle}>{selected.leaveKind === "weekly_off" ? "Đăng ký ngày nghỉ tháng tới" : "Đơn xin nghỉ đột xuất"} · {selected.leaveDates?.join(", ") || `${selected.leaveFrom} → ${selected.leaveTo}`}</Text>
       <Text style={styles.text}>Thợ: {selected.leaveBarberName || selected.contactName || "Thợ"}</Text>
       <Text style={styles.muted}>Lý do: {selected.leaveReason || selected.body}</Text>
+      {!!selected.leaveCoverage?.length && <Text style={styles.muted}>Nhân sự sau khi duyệt: {selected.leaveCoverage.map((day) => `${day.date} còn ${day.remainingCount}/${day.scheduledCount} thợ`).join(" · ")}</Text>}
       <Text style={[styles.muted, { fontWeight: "700" }]}>Ca làm sẽ bị gỡ · {selected.leaveShifts?.length || 0}</Text>
       {!!selected.leaveShifts?.length && selected.leaveShifts.map((shift) => <Text key={shift.id} style={styles.muted}>{shift.date} · {shift.startTime}–{shift.endTime}</Text>)}
       <Text style={{ color: selected.leaveAppointments?.length ? colors.danger : colors.success, fontWeight: "800" }}>

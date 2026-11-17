@@ -100,8 +100,9 @@ export function CustomerBookings({ appointments, onChanged, onRebook }: {
       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}><Text style={[styles.text, { fontWeight: "700", flex: 1 }]}>{item.serviceNameSnapshot}</Text><Text style={{ color: colors.gold }}>{statusLabel[item.status]}</Text></View>
       <Text style={styles.text}>{dateTimeLabel(item.startAt)} · {item.durationSnapshot} phút</Text>
       <Text style={styles.muted}>Thợ {item.barberNameSnapshot} · {money(item.priceSnapshot)}</Text>
-      {item.paymentChoice === "prepay" && <Text style={styles.muted}>Thanh toán mô phỏng: {item.simulatedPaid ? `Đã ghi nhận ${money(item.simulatedPaid)} · ${item.simulatedPaymentReference}` : `Chưa thanh toán ${money(item.depositRequired || item.priceSnapshot)}`}</Text>}
-      {tab === "upcoming" && item.paymentChoice === "prepay" && !item.simulatedPaid && <Button title={`Mô phỏng thanh toán ${money(item.depositRequired || item.priceSnapshot)}`} disabled={busy} onPress={() => { setBusy(true); void api(`/appointments/${item.id}/simulate-payment`, { method: "POST" }).then(onChanged).catch((err) => setError(err.message || "Không ghi nhận được thanh toán.")).finally(() => setBusy(false)); }} />}
+      {!!item.depositRequired && <Text style={styles.muted}>{item.depositSimulationConfirmed
+        ? `Đã mô phỏng bước cọc ${money(item.depositSimulationAmount ?? item.depositRequired)}; không trừ tiền thật. Thanh toán tại salon.`
+        : `Cần cọc ${money(item.depositRequired)} (10% tổng tiền dịch vụ) tại salon.`}</Text>}
       {tab === "upcoming" && <><Text style={[styles.muted, { fontFamily: "monospace" }]}>Mã nhận lịch tại quầy: {item.id.slice(0, 8).toUpperCase()}</Text>
         <View style={styles.row}>{!!salonMapsUrl && <Button title="Chỉ đường" secondary onPress={() => void Linking.openURL(salonMapsUrl)} />}
           {canChange(item) && <><Button title="Đổi giờ" secondary onPress={() => { setError(""); setMoveOffset(0); setMoveItem(item); }} /><Button title="Hủy lịch" secondary onPress={() => { setError(""); setCancelItem(item); }} /></>}

@@ -82,6 +82,11 @@ export function Customer({ user, onLogout, onUserUpdated }: { user: User; onLogo
       setUnreadMessages(result.count);
     } catch (err: any) { setError(err.message || "Không thể đánh dấu tin nhắn đã đọc."); }
   }
+  const activeAppointmentCount = appointments.filter((item) => {
+    if (item.walkIn) return false;
+    return item.status === "in_progress" ||
+      ((item.status === "pending" || item.status === "confirmed") && Date.parse(item.startAt) > Date.now());
+  }).length;
   const tabs: { id: Tab; icon: string; label: string }[] = [
     { id: "home", icon: "⌂", label: "Trang chủ" }, { id: "book", icon: "✂", label: "Đặt lịch" },
     { id: "bookings", icon: "◷", label: "Lịch của tôi" }, { id: "ai", icon: "✦", label: "Tư vấn" },
@@ -94,7 +99,9 @@ export function Customer({ user, onLogout, onUserUpdated }: { user: User; onLogo
       <ErrorText message={error} />{loading && <Loading />}
       {tab === "home" && <CustomerHome name={user.name} services={services} barbers={barbers} appointments={appointments} vouchers={vouchers} notifications={notifications}
         onBook={openBook} onBookings={() => setTab("bookings")} onNotifications={() => setTab("notifications")} />}
-      {tab === "book" && <CustomerBooking key={bookingKey} services={services} barbers={barbers} vouchers={vouchers} user={user} preset={preset} onBooked={booked} onUserUpdated={updated} />}
+      {tab === "book" && <CustomerBooking key={bookingKey} services={services} barbers={barbers} vouchers={vouchers} preset={preset}
+        activeAppointmentCount={activeAppointmentCount}
+        onBooked={booked} onViewBookings={() => setTab("bookings")} />}
       {tab === "bookings" && <CustomerBookings appointments={appointments} onChanged={refreshAppointments} onRebook={openBook} />}
       {tab === "ai" && <Consultation onBookWithHaircut={(name, note, serviceName) => {
         const service = services.find((item) => serviceName && item.name.toLowerCase().includes(serviceName.toLowerCase())) || services.find((item) => item.id === "cut");

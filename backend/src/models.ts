@@ -30,7 +30,6 @@ export interface User {
   internalNote?: string;
   blacklisted?: boolean;
   hairHistory?: HairRecord[];
-  birthday?: string;
   loyaltyPoints?: number;
   barberId?: string;
   noShowCount?: number;
@@ -69,6 +68,8 @@ export interface WorkSchedule {
   date: string;
   startTime: string;
   endTime: string;
+  lunchStartTime?: string;
+  lunchEndTime?: string;
   sourceWeeklyId?: string;
 }
 
@@ -102,10 +103,10 @@ export interface Appointment {
   review?: string;
   note?: string;
   styleName?: string;
-  paymentChoice?: "salon" | "prepay";
+  paymentChoice?: "salon";
   depositRequired?: number;
-  simulatedPaid?: number;
-  simulatedPaymentReference?: string;
+  depositSimulationConfirmed?: boolean;
+  depositSimulationAmount?: number;
   reviewPhoto?: string;
   portfolioConsent?: boolean;
   aiHaircutName?: string;
@@ -135,6 +136,8 @@ export interface LeaveRequest {
   to: string;
   reason: string;
   status: "pending" | "approved" | "rejected";
+  kind?: "weekly_off" | "emergency";
+  dates?: string[];
 }
 
 export interface WeeklyShift {
@@ -143,6 +146,8 @@ export interface WeeklyShift {
   weekday: number;
   startTime: string;
   endTime: string;
+  lunchStartTime?: string;
+  lunchEndTime?: string;
   from: string;
   to: string;
 }
@@ -169,7 +174,7 @@ export interface Notification {
   body: string;
   createdAt: string;
   read: boolean;
-  kind: "promotion" | "reminder" | "manual" | "booking" | "review_invite" | "loyalty" | "care" | "birthday";
+  kind: "promotion" | "reminder" | "manual" | "booking" | "review_invite" | "loyalty" | "care";
   appointmentId?: string;
   stage?: "two_hours" | "thirty_minutes";
 }
@@ -208,6 +213,8 @@ export interface SupportMessage {
   leaveFrom?: string;
   leaveTo?: string;
   leaveReason?: string;
+  leaveKind?: LeaveRequest["kind"];
+  leaveDates?: string[];
   messages?: SupportThreadEntry[];
 }
 

@@ -37,7 +37,7 @@ export function SchedulesAdmin({ active, barbers, preset }: { active: boolean; b
   const [selectedDate, setSelectedDate] = useState(shopDate());
   const [monthStart, setMonthStart] = useState(`${shopDate().slice(0, 7)}-01`);
   const [editing, setEditing] = useState<WorkSchedule | "new" | null>(null);
-  const [form, setForm] = useState({ barberId: "", date: shopDate(), startTime: "09:00", endTime: "18:00" });
+  const [form, setForm] = useState({ barberId: "", date: shopDate(), startTime: "09:00", endTime: "19:00" });
   const [deleting, setDeleting] = useState<WorkSchedule | null>(null);
   const [blockFormOpen, setBlockFormOpen] = useState(false);
   const [blockForm, setBlockForm] = useState({ barberId: "", date: shopDate(), startTime: "12:00", endTime: "13:00", reason: "" });
@@ -83,7 +83,7 @@ export function SchedulesAdmin({ active, barbers, preset }: { active: boolean; b
     }
     setEditing(item);
     setForm(item === "new"
-      ? { barberId: barberId || options[0]?.id || "", date, startTime: "09:00", endTime: "18:00" }
+      ? { barberId: barberId || options[0]?.id || "", date, startTime: "09:00", endTime: "19:00" }
       : { barberId: item.barberId, date: item.date, startTime: item.startTime, endTime: item.endTime });
   }
   async function save() {
@@ -130,7 +130,7 @@ export function SchedulesAdmin({ active, barbers, preset }: { active: boolean; b
       const result = await api<{ createdCount: number; skippedLeaveCount: number; skippedExistingCount: number; defaultBarberCount: number }>("/admin/work-schedules/auto", {
         method: "POST", body: { from, to, ...(barberId ? { barberId } : {}) }
       });
-      setSuccess(`${result.defaultBarberCount ? `Áp dụng ca mặc định Thứ 2–Thứ 7, 09:00–18:00 cho ${result.defaultBarberCount} thợ chưa có mẫu. ` : ""}Đã xếp ${result.createdCount} ca; bỏ qua ${result.skippedExistingCount} ca đã có và ${result.skippedLeaveCount} ngày có đơn nghỉ.`);
+      setSuccess(`${result.defaultBarberCount ? `Áp dụng ca mặc định Thứ 2–Chủ nhật, 09:00–19:00, nghỉ trưa luân phiên cho ${result.defaultBarberCount} thợ chưa có mẫu. ` : ""}Đã xếp ${result.createdCount} ca; bỏ qua ${result.skippedExistingCount} ca đã có và ${result.skippedLeaveCount} ngày nghỉ đã duyệt.`);
       setConfirmAuto(false); await list.reload();
     } catch (err: any) { setError(err.message || "Không tự xếp được ca."); }
     finally { setAutoBusy(false); }
@@ -202,6 +202,7 @@ export function SchedulesAdmin({ active, barbers, preset }: { active: boolean; b
               {daySchedules.map((item) => <Pressable key={item.id} onPress={() => { setSelectedDate(date); open(item); }} style={{ backgroundColor: colors.input, borderLeftWidth: 3, borderLeftColor: colors.gold, borderRadius: 9, padding: 9, gap: 3 }}>
                 <Text style={[styles.text, { fontWeight: "700", fontSize: 13 }]} numberOfLines={1}>{barbers.find((b) => b.id === item.barberId)?.name || item.barberId}</Text>
                 <Text style={{ color: colors.gold, fontSize: 12, fontWeight: "700" }}>{item.startTime}–{item.endTime}</Text>
+                {item.lunchStartTime && <Text style={[styles.muted, { fontSize: 11 }]}>Nghỉ trưa · {item.lunchStartTime}–{item.lunchEndTime}</Text>}
                 <Text style={[styles.muted, { fontSize: 11 }]}>{item.activeAppointmentCount || 0} lịch hẹn</Text>
                 <View style={styles.row}><Text style={{ color: colors.text, fontSize: 11 }}>Chạm để sửa</Text><Text style={{ color: colors.gold, fontSize: 11 }}>›</Text></View>
               </Pressable>)}

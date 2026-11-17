@@ -47,7 +47,7 @@ export function StaffLeaveManagement({ active, barbers, onChanged }: { active: b
     {!!message && <Text style={{ color: colors.success }}>{message}</Text>}
     <DataState loading={leaves.loading} error={leaves.error} retry={() => void leaves.reload()} empty={leaves.data?.length === 0} />
     {leaves.data?.map((item) => <Card key={item.id}>
-      <Text style={styles.text}>{barbers.find((barber) => barber.id === item.barberId)?.name || "Thợ đã ngừng hoạt động"} · {item.from} → {item.to}</Text>
+      <Text style={styles.text}>{barbers.find((barber) => barber.id === item.barberId)?.name || "Thợ đã ngừng hoạt động"} · {item.kind === "weekly_off" ? "Ngày nghỉ tháng" : "Nghỉ đột xuất"} · {item.dates?.join(", ") || `${item.from} → ${item.to}`}</Text>
       <Text style={styles.muted}>{item.reason} · {item.status === "pending" ? "Chờ duyệt" : item.status === "approved" ? "Đã duyệt" : "Từ chối"}</Text>
       <Text style={styles.muted}>Ca làm trong khoảng nghỉ · {item.leaveShifts?.length || 0}</Text>
       {item.leaveShifts?.map((shift) => <Text key={shift.id} style={styles.muted}>{shift.date} · {shift.startTime}–{shift.endTime}</Text>)}

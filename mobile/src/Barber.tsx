@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "./api";
 import type { LeaveRequest, User } from "./types";
 import { Button, Card, DragScrollView, ErrorText, Field, Page, colors, dateTimeLabel, money, shopDate, styles, timeLabel } from "./ui";
-import { DateField } from "./admin/components";
 import { SupportInbox, type CustomerSearchResult, type SupportContact, type SupportMessage } from "./SupportInbox";
 import { salonPhone } from "./customer/salon";
 import { QuickContactModal } from "./QuickContactModal";
@@ -28,7 +27,7 @@ type BarberAppointment = {
 };
 type BarberDay = { appointments: BarberAppointment[]; todayCount: number; monthCount: number; todayCommission: number; monthCommission: number };
 type BarberProfile = { id: string; name: string; bio: string; imageUrl: string; title?: string; commissionRate: number; serviceNames: string[] };
-type BarberWorkSchedule = { id: string; date: string; startTime: string; endTime: string; activeAppointmentCount: number };
+type BarberWorkSchedule = { id: string; date: string; startTime: string; endTime: string; lunchStartTime?: string; lunchEndTime?: string; activeAppointmentCount: number };
 
 const statusText: Record<BarberAppointment["status"], string> = {
   pending: "Chờ xác nhận", confirmed: "Đã xác nhận", in_progress: "Đang phục vụ",
@@ -54,6 +53,23 @@ function weekdayLabel(value: string) {
   return new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC", weekday: "short" }).format(new Date(`${value}T12:00:00Z`));
 }
 
+function shiftMonth(value: string, offset: number) {
+  const date = new Date(`${value.slice(0, 7)}-01T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function emergencyCalendarDays(month: string) {
+  const first = new Date(`${month.slice(0, 7)}-01T12:00:00Z`);
+  const mondayOffset = (first.getUTCDay() + 6) % 7;
+  first.setUTCDate(first.getUTCDate() - mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(first);
+    day.setUTCDate(first.getUTCDate() + index);
+    return day.toISOString().slice(0, 10);
+  });
+}
+
 function AppointmentCard({ item, busy, canUpdate, onChange, onContact }: {
   item: BarberAppointment; busy: boolean; canUpdate: boolean; onChange: (status: "in_progress" | "completed") => void; onContact?: () => void;
 }) {
@@ -69,7 +85,7 @@ function AppointmentCard({ item, busy, canUpdate, onChange, onContact }: {
     </View>}
     {!!item.note && <Text style={styles.muted}>Ghi chú: {item.note}</Text>}
     {item.status === "completed" && !!item.commission && <Text style={{ color: colors.success, fontWeight: "700" }}>Hoa hồng ca này: {money(item.commission)}</Text>}
-    {!!item.customerId && <View style={styles.row}><Button title="Nhắn khách" secondary onPress={onContact || (() => {})} />{item.customerPhoneSnapshot && <Button title="Gọi khách" secondary onPress={() => void Linking.openURL(`tel:${item.customerPhoneSnapshot}`)} />}</View>}
+    {!!item.customerId && <View style={styles.row}><Button title="Nhắn khách" secondary onPress={onContact || (() => {})} /></View>}
     {canUpdate && item.status === "confirmed" && <Button title={busy ? "Đang cập nhật..." : "Bắt đầu phục vụ"} disabled={busy} onPress={() => onChange("in_progress")} />}
     {canUpdate && item.status === "in_progress" && <Button title={busy ? "Đang cập nhật..." : "Hoàn thành ca"} disabled={busy} onPress={() => onChange("completed")} />}
   </Card>;
@@ -93,8 +109,9 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [contactAppointment, setContactAppointment] = useState<BarberAppointment | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [leaveFrom, setLeaveFrom] = useState(shopDate(1));
-  const [leaveTo, setLeaveTo] = useState(shopDate(1));
+  const [leaveKind, setLeaveKind] = useState<"weekly_off" | "emergency">("emergency");
+  const [emergencyMonth, setEmergencyMonth] = useState(`${shopDate().slice(0, 7)}-01`);
+  const [emergencyDates, setEmergencyDates] = useState<string[]>([]);
   const [leaveReason, setLeaveReason] = useState("");
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState("");
@@ -105,7 +122,7 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
       const today = shopDate();
       const monthStart = `${today.slice(0, 7)}-01`;
       const scheduleFrom = mondayOf(today);
-      const scheduleTo = shiftDate(scheduleFrom, 13);
+      const scheduleTo = shiftDate(scheduleFrom, 6);
       const [todayData, scheduleData, workScheduleData, monthData, profileData] = await Promise.all([
         api<BarberDay>("/barber/today"),
         api<BarberAppointment[]>(`/barber/appointments?from=${scheduleFrom}&to=${scheduleTo}`),
@@ -172,7 +189,10 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
     if (tab !== "leave") return;
     let live = true;
     const loadLeaves = async () => {
-      try { const items = await api<LeaveRequest[]>("/barber/leaves"); if (live) { setLeaveRequests(items); setLeaveError(""); } }
+      try {
+        const items = await api<LeaveRequest[]>("/barber/leaves");
+        if (live) { setLeaveRequests(items); setLeaveError(""); }
+      }
       catch (err: any) { if (live) setLeaveError(err.message || "Không tải được đơn xin nghỉ."); }
     };
     void loadLeaves();
@@ -217,14 +237,30 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
   }
 
   async function submitLeave() {
-    if (leaveBusy || leaveFrom > leaveTo || leaveReason.trim().length < 2) return;
+    if (leaveBusy || leaveReason.trim().length < 2) return;
     setLeaveBusy(true); setLeaveError(""); setLeaveMessage("");
     try {
-      await api<LeaveRequest>("/barber/leaves", { method: "POST", body: { from: leaveFrom, to: leaveTo, reason: leaveReason.trim() } });
-      setLeaveReason(""); setLeaveMessage("Đã gửi đơn nghỉ. Quản lý sẽ xem xét và cập nhật trạng thái.");
+      const body = { kind: "emergency", dates: emergencyDates, from: emergencyDates[0], to: emergencyDates[emergencyDates.length - 1], reason: leaveReason.trim() };
+      await api<LeaveRequest>("/barber/leaves", { method: "POST", body });
+      setLeaveReason(""); setEmergencyDates([]); setLeaveMessage("Đã gửi đơn nghỉ vào hòm thư admin để duyệt.");
       setLeaveRequests(await api<LeaveRequest[]>("/barber/leaves"));
     } catch (err: any) { setLeaveError(err.message || "Không gửi được đơn xin nghỉ."); }
     finally { setLeaveBusy(false); }
+  }
+
+  function toggleEmergencyDate(date: string) {
+    if (date < shopDate()) return;
+    if (emergencyDates.includes(date)) {
+      setLeaveError("");
+      setEmergencyDates((dates) => dates.filter((item) => item !== date));
+      return;
+    }
+    if (emergencyDates.length >= 3) {
+      setLeaveError("Đơn nghỉ đột xuất tối đa 3 ngày. Nếu cần nghỉ dài hơn, hãy trao đổi trực tiếp với chủ tiệm.");
+      return;
+    }
+    setLeaveError("");
+    setEmergencyDates((dates) => [...dates, date].sort());
   }
 
   async function change(item: BarberAppointment, status: "in_progress" | "completed") {
@@ -260,7 +296,7 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
           <View style={styles.row}><Text style={styles.muted}>✂ {day?.appointments.length || 0} lịch</Text><Text style={styles.muted}>✓ {day?.todayCount || 0} ca xong</Text><Text style={styles.muted}>＋ {money(day?.todayCommission || 0)}</Text></View>
         </Card>
         {nextAppointment && <Card><Text style={{ color: colors.gold, fontWeight: "700" }}>LỊCH TIẾP THEO</Text><Text style={styles.subtitle}>{timeLabel(nextAppointment.startAt)} · {nextAppointment.customerNameSnapshot}</Text><Text style={styles.muted}>{nextAppointment.serviceNameSnapshot}</Text></Card>}
-        <View style={styles.row}><Button title="Xem lịch 14 ngày" secondary onPress={() => setTab("schedule")} /><Button title="Xem thu nhập" secondary onPress={() => setTab("performance")} /><Button title="Làm mới" secondary onPress={() => void load()} /></View>
+        <View style={styles.row}><Button title="Xem lịch tuần này" secondary onPress={() => { setSelectedDate(shopDate()); setTab("schedule"); }} /><Button title="Xem thu nhập" secondary onPress={() => setTab("performance")} /><Button title="Làm mới" secondary onPress={() => void load()} /></View>
         <Text style={styles.subtitle}>Danh sách ca</Text>
         {!day?.appointments.length && <Card><Text style={styles.text}>Hôm nay chưa có lịch được giao.</Text><Text style={styles.muted}>Lịch mới sẽ tự xuất hiện ở đây.</Text></Card>}
         {day?.appointments.map((item) => <AppointmentCard key={item.id} item={item} canUpdate onChange={(status) => void change(item, status)} onContact={() => setContactAppointment(item)} busy={busyId === item.id} />)}
@@ -269,7 +305,7 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
       {tab === "schedule" && <>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <View><Text style={styles.subtitle}>Lịch tuần</Text><Text style={styles.muted}>Ca làm và lịch hẹn của bạn</Text></View>
-          <Button title={scheduleLoading ? "Đang tải..." : "↻ Tải lại"} secondary disabled={scheduleLoading} onPress={() => void loadScheduleRange(scheduleRange.from || mondayOf(selectedDate), scheduleRange.to || shiftDate(mondayOf(selectedDate), 13))} />
+          <Button title={scheduleLoading ? "Đang tải..." : "↻ Tải lại"} secondary disabled={scheduleLoading} onPress={() => void loadScheduleRange(mondayOf(selectedDate), shiftDate(mondayOf(selectedDate), 6))} />
         </View>
         <Card style={{ padding: 12, gap: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -289,14 +325,14 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
                 return <Pressable key={date} accessibilityRole="button" accessibilityLabel={`${weekdayLabel(date)} ${date}`} onPress={() => chooseScheduleDate(date)} style={{ width: 150, minHeight: 150, backgroundColor: selectedDate === date ? colors.input : colors.card, borderRadius: 13, borderWidth: 1, borderColor: selectedDate === date ? colors.gold : colors.border, padding: 10, gap: 8 }}>
                   <View style={{ paddingBottom: 7, borderBottomWidth: 1, borderColor: colors.border }}><Text style={{ color: date === shopDate() ? colors.gold : colors.text, fontWeight: "800" }}>{weekdayLabel(date)}{date === shopDate() ? " · Hôm nay" : ""}</Text><Text style={styles.muted}>{date.slice(5)} · {appointments.length} lịch</Text></View>
                   {!shifts.length && !appointments.length && <Text style={[styles.muted, { paddingVertical: 8 }]}>Không có ca</Text>}
-                  {shifts.map((shift) => <View key={shift.id} style={{ backgroundColor: colors.input, borderLeftWidth: 3, borderLeftColor: colors.gold, borderRadius: 8, padding: 8, gap: 3 }}><Text style={{ color: colors.gold, fontWeight: "800" }}>{shift.startTime}–{shift.endTime}</Text><Text style={[styles.muted, { fontSize: 11 }]}>{shift.activeAppointmentCount} lịch đang hiệu lực</Text></View>)}
+                  {shifts.map((shift) => <View key={shift.id} style={{ backgroundColor: colors.input, borderLeftWidth: 3, borderLeftColor: colors.gold, borderRadius: 8, padding: 8, gap: 3 }}><Text style={{ color: colors.gold, fontWeight: "800" }}>{shift.startTime}–{shift.endTime}</Text>{shift.lunchStartTime && <Text style={[styles.muted, { fontSize: 11 }]}>Nghỉ trưa {shift.lunchStartTime}–{shift.lunchEndTime}</Text>}<Text style={[styles.muted, { fontSize: 11 }]}>{shift.activeAppointmentCount} lịch đang hiệu lực</Text></View>)}
                   {!!appointments.length && <Text style={[styles.muted, { fontSize: 11 }]}>{appointments.length} lịch hẹn trong ngày</Text>}
                 </Pressable>;
               })}
           </DragScrollView>
         </Card>
         <Text style={styles.subtitle}>Ngày {selectedDate}</Text>
-        {workSchedules.filter((item) => item.date === selectedDate).map((shift) => <Card key={shift.id} style={{ borderLeftWidth: 4, borderLeftColor: colors.gold }}><Text style={styles.text}>Ca làm · {shift.startTime}–{shift.endTime}</Text><Text style={styles.muted}>{shift.activeAppointmentCount} lịch hẹn đang hiệu lực trong ca</Text></Card>)}
+        {workSchedules.filter((item) => item.date === selectedDate).map((shift) => <Card key={shift.id} style={{ borderLeftWidth: 4, borderLeftColor: colors.gold }}><Text style={styles.text}>Ca làm · {shift.startTime}–{shift.endTime}</Text>{shift.lunchStartTime && <Text style={styles.muted}>Nghỉ trưa · {shift.lunchStartTime}–{shift.lunchEndTime}</Text>}<Text style={styles.muted}>{shift.activeAppointmentCount} lịch hẹn đang hiệu lực trong ca</Text></Card>)}
         {!selectedAppointments.length && <Card><Text style={styles.text}>{workSchedules.some((item) => item.date === selectedDate) ? "Bạn chưa có lịch hẹn trong ca này." : "Ngày này chưa được xếp ca làm."}</Text></Card>}
         {selectedAppointments.map((item) => <AppointmentCard key={item.id} item={item} canUpdate={selectedDate === shopDate()} onChange={(status) => void change(item, status)} onContact={() => setContactAppointment(item)} busy={busyId === item.id} />)}
       </>}
@@ -321,14 +357,43 @@ export function BarberApp({ user, onLogout }: { user: User; onLogout: () => void
       {tab === "messages" && <><ErrorText message={supportError} /><SupportInbox messages={supportMessages} contacts={supportContacts} viewerRole="barber" viewerId={user.id} onCompose={sendSupport} onReply={replySupport} onSearchCustomers={searchCustomers} onRead={markSupportRead} /></>}
 
       {tab === "leave" && <>
-        <Text style={styles.muted}>Gửi đơn xin nghỉ để quản lý duyệt. Đơn đã duyệt sẽ khóa lịch đặt trong khoảng ngày được chọn.</Text>
-        <Card><DateField label="Từ ngày" value={leaveFrom} onChange={setLeaveFrom} /><DateField label="Đến ngày" value={leaveTo} onChange={setLeaveTo} /><Field label="Lý do xin nghỉ" value={leaveReason} onChange={setLeaveReason} multiline />
+        <Text style={styles.muted}>Gửi đơn nghỉ đột xuất hoặc xem tình trạng đơn đã gửi. Đơn sẽ được chuyển vào hòm thư admin.</Text>
+        <View style={styles.row}>
+          <Button title="Ngày nghỉ tháng" secondary={leaveKind !== "weekly_off"} onPress={() => { setLeaveKind("weekly_off"); setLeaveError(""); setLeaveMessage(""); }} />
+          <Button title="Nghỉ đột xuất" secondary={leaveKind !== "emergency"} onPress={() => { setLeaveKind("emergency"); setLeaveError(""); }} />
+        </View>
+        {leaveKind === "weekly_off" ? <Card>
+          <Text style={styles.subtitle}>Ngày nghỉ theo tháng</Text>
+          <Text style={styles.muted}>Đang phát triển</Text>
+        </Card> : <Card>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={styles.subtitle}>Chọn ngày nghỉ · tối đa 3 ngày</Text>
+              <View style={styles.row}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Tháng trước" disabled={emergencyMonth <= `${shopDate().slice(0, 7)}-01`} onPress={() => setEmergencyMonth((month) => shiftMonth(month, -1))} style={{ width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: colors.input, opacity: emergencyMonth <= `${shopDate().slice(0, 7)}-01` ? 0.4 : 1 }}><Text style={{ color: colors.gold, fontSize: 22 }}>‹</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Tháng sau" onPress={() => setEmergencyMonth((month) => shiftMonth(month, 1))} style={{ width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: colors.input }}><Text style={{ color: colors.gold, fontSize: 22 }}>›</Text></Pressable>
+              </View>
+            </View>
+            <Text style={styles.muted}>{new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${emergencyMonth}T12:00:00Z`))} · Đã chọn {emergencyDates.length}/3 ngày</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-around" }}>{["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => <Text key={label} style={[styles.muted, { width: "14.28%", textAlign: "center" }]}>{label}</Text>)}</View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {emergencyCalendarDays(emergencyMonth).map((date) => {
+                const inMonth = date.slice(0, 7) === emergencyMonth.slice(0, 7);
+                const past = date < shopDate();
+                const selected = emergencyDates.includes(date);
+                return <Pressable key={date} accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: past || !inMonth }} accessibilityLabel={date} disabled={past || !inMonth} onPress={() => toggleEmergencyDate(date)} style={{ width: "14.28%", height: 42, alignItems: "center", justifyContent: "center" }}>
+                  <View style={{ width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: selected ? colors.gold : "transparent", opacity: past || !inMonth ? 0.32 : 1 }}><Text style={{ color: selected ? colors.dark : colors.text, fontWeight: selected ? "800" : "500" }}>{Number(date.slice(-2))}</Text></View>
+                </Pressable>;
+              })}
+            </View>
+            {!!emergencyDates.length && <Text style={styles.text}>Ngày đã chọn: {emergencyDates.join(" · ")}</Text>}
+            <Text style={styles.muted}>Nghỉ đột xuất tối đa 3 ngày liên tục. Cần nghỉ lâu hơn? Hãy trao đổi riêng với chủ tiệm.</Text>
+          <Field label="Lý do xin nghỉ" value={leaveReason} onChange={setLeaveReason} multiline />
           <ErrorText message={leaveError} />{!!leaveMessage && <Text style={{ color: colors.success }}>{leaveMessage}</Text>}
-          <Button title={leaveBusy ? "Đang gửi..." : "Gửi đơn xin nghỉ"} disabled={leaveBusy || leaveFrom < shopDate() || leaveFrom > leaveTo || leaveReason.trim().length < 2} onPress={() => void submitLeave()} />
-        </Card>
+          <Button title={leaveBusy ? "Đang gửi..." : "Gửi đơn cho admin duyệt"} disabled={leaveBusy || leaveReason.trim().length < 2 || emergencyDates.length === 0} onPress={() => void submitLeave()} />
+        </Card>}
         <Text style={styles.subtitle}>Đơn nghỉ của tôi</Text>
         {!leaveRequests.length && <Card><Text style={styles.muted}>Bạn chưa gửi đơn xin nghỉ nào.</Text></Card>}
-        {leaveRequests.map((item) => <Card key={item.id}><Text style={styles.text}>{item.from} → {item.to}</Text><Text style={styles.muted}>{item.reason}</Text><Text style={{ color: item.status === "approved" ? colors.success : item.status === "rejected" ? colors.danger : colors.gold, fontWeight: "700" }}>{item.status === "approved" ? "Đã duyệt" : item.status === "rejected" ? "Từ chối" : "Chờ duyệt"}</Text></Card>)}
+        {leaveRequests.map((item) => <Card key={item.id}><Text style={styles.text}>{item.kind === "weekly_off" ? "Ngày nghỉ tháng" : "Nghỉ đột xuất"} · {item.dates?.join(", ") || `${item.from} → ${item.to}`}</Text><Text style={styles.muted}>{item.reason}</Text><Text style={{ color: item.status === "approved" ? colors.success : item.status === "rejected" ? colors.danger : colors.gold, fontWeight: "700" }}>{item.status === "approved" ? "Đã duyệt" : item.status === "rejected" ? "Từ chối" : "Chờ duyệt"}</Text></Card>)}
       </>}
 
       {tab === "profile" && <>

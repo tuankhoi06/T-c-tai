@@ -24,7 +24,7 @@ for (const account of demoCustomerAccounts) {
   if (phoneOwner && phoneOwner.id !== account.id) throw new Error(`Số điện thoại demo đã được tài khoản khác sử dụng: ${account.phone}`);
 
   const customer: User = current
-    ? { ...current, name: account.name, username: current.username || account.name, phone: account.phone, loyaltyPoints: account.loyaltyPoints }
+    ? { ...current, name: account.name, username: current.username || account.name, phone: account.phone }
     : { ...account, passwordHash: await hashPassword(demoCustomerPassword), role: "customer", blacklisted: false, hairHistory: [] };
   delete customer.email;
   repo.users.put(customer);

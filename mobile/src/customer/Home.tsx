@@ -63,7 +63,7 @@ export function CustomerHome({ name, services, barbers, appointments, vouchers, 
       </Pressable>)}</DragScrollView>
       <Text style={[styles.muted, { fontSize: 11 }]}>Vuốt ngang để xem thêm dịch vụ →</Text>
     </View>
-    {browseMode && <View style={{ gap: 8 }}><Text style={styles.subtitle}>Cảm hứng từ tiệm</Text><Text style={[styles.muted, { fontSize: 12 }]}>Ảnh chụp thật tại barbershop; kiểu tóc bên dưới là gợi ý để trao đổi với thợ.</Text>
+    {browseMode && <View style={{ gap: 8 }}><Text style={styles.subtitle}>Cảm hứng từ tiệm</Text>
       <DragScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>{inspirations.map((item) => <Pressable key={item.name} onPress={() => onBook({ serviceIds: services.some((service) => service.id === "cut") ? ["cut"] : [], styleName: item.name, note: item.note })} style={[styles.card, { width: 245, padding: 0, overflow: "hidden", gap: 0 }]}>
         <Image source={item.photo} style={{ width: "100%", height: 140 }} resizeMode="cover" /><View style={{ padding: 12, gap: 3 }}><Text style={[styles.text, { fontWeight: "700" }]}>{item.name}</Text><Text style={styles.muted} numberOfLines={2}>{item.note}</Text></View>
       </Pressable>)}</DragScrollView>

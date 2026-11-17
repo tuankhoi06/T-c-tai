@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { api } from "../api";
 import type { User } from "../types";
 import { Button, Card, colors, ErrorText, Field, shopDate, styles } from "../ui";
@@ -11,7 +11,6 @@ export function CustomersAdmin() {
   const list = useAdminList<User[]>("/admin/customers");
   const [search, setSearch] = useState("");
   const [bookingFilter, setBookingFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("name");
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [form, setForm] = useState(blank);
   const [deleting, setDeleting] = useState<User | null>(null);
@@ -66,14 +65,13 @@ export function CustomersAdmin() {
   const query = search.trim().toLocaleLowerCase("vi-VN");
   const visible = (list.data || []).filter((item) => [item.name, item.phone || ""].some((value) => value.toLocaleLowerCase("vi-VN").includes(query)))
     .filter((item) => bookingFilter === "all" || (bookingFilter === "blocked" ? !!item.blacklisted : !item.blacklisted))
-    .sort((a, b) => sortBy === "points" ? (b.loyaltyPoints || 0) - (a.loyaltyPoints || 0) : a.name.localeCompare(b.name, "vi"));
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
   return <View style={{ gap: 12 }}>
     <Text style={styles.subtitle}>Khách hàng</Text>
     <View style={styles.row}><Button title="Thêm khách" onPress={() => open("new")} /><Button title="Làm mới" secondary disabled={list.loading} onPress={() => void list.reload()} /></View>
     {!!success && <Text style={{ color: colors.success }}>{success}</Text>}<ErrorText message={!editing && !deleting ? error : ""} />
     <Field label="Tìm tên hoặc số điện thoại" value={search} onChange={setSearch} />
     <Text style={styles.muted}>Trạng thái đặt lịch</Text><Choice value={bookingFilter} onChange={setBookingFilter} options={[{ label: "Tất cả", value: "all" }, { label: "Bình thường", value: "normal" }, { label: "Đã chặn", value: "blocked" }]} />
-    <Text style={styles.muted}>Sắp xếp</Text><Choice value={sortBy} onChange={setSortBy} options={[{ label: "Tên A–Z", value: "name" }, { label: "Điểm cao nhất", value: "points" }]} />
     <DataState loading={list.loading} error={list.error} retry={() => void list.reload()} empty={visible.length === 0} />
     {!list.error && visible.map((item) => <Card key={item.id}>
       <Text style={styles.subtitle}>{item.name}</Text>
@@ -81,7 +79,7 @@ export function CustomersAdmin() {
       {!!item.blacklisted && <Text style={styles.muted}>Đã chặn đặt lịch</Text>}
       {!!item.internalNote && <Text style={styles.muted}>Ghi chú nội bộ: {item.internalNote}</Text>}
       {!!item.hairHistory?.length && <View style={{ gap: 4 }}><Text style={styles.text}>Lịch sử làm tóc</Text>{item.hairHistory.map((entry) => <Text key={entry.id} style={styles.muted}>{entry.date} · {entry.style}{entry.color ? ` · Màu ${entry.color}` : ""}{entry.formula ? ` · Công thức ${entry.formula}` : ""}{entry.note ? ` · ${entry.note}` : ""}</Text>)}</View>}
-      <View style={styles.row}><Button title="Sửa hồ sơ" secondary onPress={() => open(item)} /><Button title="Thêm lịch sử tóc" secondary onPress={() => { setHistoryCustomer(item); setError(""); }} /><Button title="Xóa" secondary onPress={() => { setError(""); setDeleting(item); }} />{!!item.phone && <Button title="Gọi khách" onPress={() => void Linking.openURL("tel:" + item.phone)} />}</View>
+      <View style={styles.row}><Button title="Sửa hồ sơ" secondary onPress={() => open(item)} /><Button title="Thêm lịch sử tóc" secondary onPress={() => { setHistoryCustomer(item); setError(""); }} /><Button title="Xóa" secondary onPress={() => { setError(""); setDeleting(item); }} /></View>
     </Card>)}
     <FormModal visible={!!editing} title={editing === "new" ? "Thêm khách hàng" : "Sửa khách hàng"} onClose={() => { if (!busy) setEditing(null); }}>
       <ErrorText message={error} />

@@ -158,7 +158,6 @@ export class MemoryRepository implements Repository {
         phone: "0922222222",
         passwordHash: await hashPassword("Customer123!"),
         role: "customer",
-        loyaltyPoints: 320,
         blacklisted: false,
         internalNote: "Ưa kiểu tóc gọn, dễ chăm sóc.",
         hairHistory: [{ id: "hair-lan-1", date: DateTime.now().setZone(SHOP_ZONE).minus({ days: 18 }).toISODate()!, style: "Layer ngang vai", note: "Tỉa nhẹ phần đuôi" }]
@@ -169,7 +168,6 @@ export class MemoryRepository implements Repository {
         phone: "0933333333",
         passwordHash: await hashPassword("Customer123!"),
         role: "customer",
-        loyaltyPoints: 90,
         blacklisted: false,
         hairHistory: []
       }

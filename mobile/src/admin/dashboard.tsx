@@ -69,8 +69,8 @@ export function DashboardAdmin({ active, refreshKey }: { active: boolean; refres
         style={{ flexDirection: "row", flexWrap: "wrap", gap: statusGap }}
       >{data.stylistStatus.map((item) => <Card key={item.barberId} style={{ width: statusCardWidth, minWidth: 0, flexGrow: 0, flexShrink: 0 }}>
         <Text style={styles.text}>{item.name}</Text>
-        <Text style={{ color: item.status === "available" ? colors.success : item.status === "busy" ? colors.gold : colors.danger, fontWeight: "700" }}>
-          {item.status === "available" ? "Đang rảnh" : item.status === "busy" ? "Đang phục vụ" : "Đang nghỉ"}
+        <Text style={{ color: item.status === "available" ? colors.success : item.status === "busy" || item.status === "lunch" ? colors.gold : colors.danger, fontWeight: "700" }}>
+          {item.status === "available" ? "Đang rảnh" : item.status === "busy" ? "Đang phục vụ" : item.status === "lunch" ? "Nghỉ trưa" : "Đang nghỉ"}
         </Text>
         {item.appointment && <Text style={styles.muted}>{item.appointment.customerNameSnapshot}</Text>}
       </Card>)}</View>

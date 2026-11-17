@@ -23,16 +23,14 @@ describe("Đặt cọc, quyền thợ và xóa tài khoản", () => {
   });
   afterEach(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); });
 
-  it("yêu cầu đặt cọc và chỉ xác nhận sau khi thanh toán mô phỏng", async () => {
+  it("ghi nhận cọc 10% tại salon cho đơn lớn và cho phép admin xác nhận lịch", async () => {
     const slot = new BookingService(repo).availability("barber-2", "dye", DateTime.now().setZone(SHOP_ZONE).plus({ days: 3 }).toISODate()!)[0];
-    expect((await call("/appointments", customerToken, "POST", { barberId: "barber-2", serviceId: "dye", startAt: slot, paymentChoice: "salon" })).status).toBe(400);
-    const made = await call("/appointments", customerToken, "POST", { barberId: "barber-2", serviceId: "dye", startAt: slot, paymentChoice: "prepay" });
+    const made = await call("/appointments", customerToken, "POST", { barberId: "barber-2", serviceId: "dye", startAt: slot, paymentChoice: "salon", depositSimulationConfirmed: true });
     expect(made.status).toBe(201);
-    expect(made.data.depositRequired).toBe(100000);
+    expect(made.data.depositRequired).toBe(50000);
+    expect(made.data.depositSimulationAmount).toBe(50000);
     const adminLogin = await fetch(`${base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "admin@hairmatch.vn", password: "Admin123!" }) });
     const adminToken = (await adminLogin.json()).token;
-    expect((await call(`/admin/appointments/${made.data.id}/status`, adminToken, "PATCH", { status: "confirmed" })).status).toBe(409);
-    expect((await call(`/appointments/${made.data.id}/simulate-payment`, customerToken, "POST")).data.simulatedPaid).toBe(100000);
     expect((await call(`/admin/appointments/${made.data.id}/status`, adminToken, "PATCH", { status: "confirmed" })).status).toBe(200);
   });
 

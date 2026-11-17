@@ -23,18 +23,6 @@ export function createDueReminders(repo: Repository): Notification[] {
     created.push(notice);
   }
   for (const user of repo.users.all().filter((item) => item.role === "customer")) {
-    if (user.birthday && DateTime.fromISO(user.birthday, { zone: SHOP_ZONE }).toFormat("MM-dd") === now.setZone(SHOP_ZONE).toFormat("MM-dd") &&
-      !repo.notifications.all().some((item) => item.customerId === user.id && item.kind === "birthday" && DateTime.fromISO(item.createdAt).setZone(SHOP_ZONE).year === now.setZone(SHOP_ZONE).year)) {
-      const today = now.setZone(SHOP_ZONE);
-      const voucher = { id: randomUUID(), code: `SNHAT${today.toFormat("yy")}${user.id.slice(-4).toUpperCase()}`,
-        kind: "percent" as const, value: 10, maxUses: 1, usedCount: 0,
-        from: today.toISODate()!, to: today.plus({ days: 14 }).toISODate()!, active: true, ownerId: user.id };
-      repo.vouchers.put(voucher);
-      const notice: Notification = { id: randomUUID(), customerId: user.id, title: "Chúc mừng sinh nhật!",
-        body: `Tặng bạn mã ${voucher.code} giảm 10%, dùng trong 14 ngày.`, kind: "birthday",
-        createdAt: new Date().toISOString(), read: false };
-      repo.notifications.put(notice); created.push(notice);
-    }
     const last = repo.appointments.all().filter((item) => item.customerId === user.id && item.status === "completed")
       .sort((a, b) => b.endAt.localeCompare(a.endAt))[0];
     if (!last || now.diff(DateTime.fromISO(last.endAt), "days").days < 21 ||

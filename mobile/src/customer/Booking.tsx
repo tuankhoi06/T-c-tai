@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { api } from "../api";
-import type { Appointment, Barber, HairService, User, Voucher } from "../types";
+import type { Appointment, Barber, HairService, Voucher } from "../types";
 import { Avatar, Button, Card, ComboBox, DragScrollView, ErrorText, Field, Loading, colors, dateTimeLabel, money, shopDate, styles, timeLabel } from "../ui";
 import { servicePhoto } from "../visuals";
-import { Choice } from "../admin/components";
 import { salonAddress } from "./salon";
 
 export type BookingPreset = { serviceIds?: string[]; barberId?: string; styleName?: string; note?: string; voucherCode?: string };
@@ -14,10 +13,13 @@ const categories: { key: NonNullable<HairService["category"]>; label: string }[]
 ];
 const price = (service: HairService) => service.promotionPrice ?? service.price;
 const eligible = (barber: Barber, ids: string[]) => barber.active && (!barber.serviceIds || ids.every((id) => barber.serviceIds!.includes(id)));
+const MAX_ACTIVE_CUSTOMER_APPOINTMENTS = 3;
 
-export function CustomerBooking({ services, barbers, vouchers, user, preset, onBooked, onUserUpdated }: {
-  services: HairService[]; barbers: Barber[]; vouchers: Voucher[]; user: User; preset?: BookingPreset;
-  onBooked: (item: Appointment) => void; onUserUpdated: (user: User, voucher?: Voucher) => void;
+export function CustomerBooking({ services, barbers, vouchers, preset, activeAppointmentCount, onBooked, onViewBookings }: {
+  services: HairService[]; barbers: Barber[]; vouchers: Voucher[]; preset?: BookingPreset;
+  activeAppointmentCount: number;
+  onBooked: (item: Appointment) => void;
+  onViewBookings: () => void;
 }) {
   const pinnedBarber = preset?.barberId ? barbers.find((item) => item.id === preset.barberId && item.active) : undefined;
   const pinnedServiceIds = pinnedBarber?.serviceIds || undefined;
@@ -31,14 +33,13 @@ export function CustomerBooking({ services, barbers, vouchers, user, preset, onB
   const [slot, setSlot] = useState<{ startAt: string; barberId: string } | null>(null);
   const [note, setNote] = useState(preset?.note || "");
   const [voucherCode, setVoucherCode] = useState(preset?.voucherCode || "");
-  const [paymentChoice, setPaymentChoice] = useState<"salon" | "prepay">("salon");
+  const [simulatedDeposit, setSimulatedDeposit] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [error, setError] = useState("");
   const selected = services.filter((item) => selectedIds.includes(item.id));
   const total = selected.reduce((sum, item) => sum + price(item), 0);
   const duration = selected.reduce((sum, item) => sum + item.durationMinutes, 0);
-  const needsDeposit = selected.some((item) => item.category === "chemical");
   const activeBarbers = barbers.filter((item) => item.active);
   const candidates = activeBarbers.filter((item) => eligible(item, selectedIds));
   const visibleServices = pinnedServiceIds
@@ -55,7 +56,15 @@ export function CustomerBooking({ services, barbers, vouchers, user, preset, onB
     (!voucher.startTime || timeLabel(slot.startAt) >= voucher.startTime) && (!voucher.endTime || timeLabel(slot.startAt) < voucher.endTime);
   const estimatedDiscount = voucherApplicable
     ? Math.min(total, voucher.kind === "percent" ? Math.floor(total * voucher.value / 100) : voucher.value) : 0;
-  const deposit = needsDeposit ? Math.min(100000, Math.max(50000, Math.round((total - estimatedDiscount) * 0.2 / 10000) * 10000)) : 0;
+  const payableTotal = total - estimatedDiscount;
+  const needsDeposit = payableTotal >= 500000;
+  const deposit = needsDeposit ? Math.round(payableTotal * 0.1) : 0;
+  const depositStepComplete = !needsDeposit || simulatedDeposit === deposit;
+  const canCreateAppointment = activeAppointmentCount < MAX_ACTIVE_CUSTOMER_APPOINTMENTS;
+
+  useEffect(() => {
+    setSimulatedDeposit(null);
+  }, [selectedIds.join(","), slot?.startAt, payableTotal]);
 
   useEffect(() => {
     if (barberChoice !== "any" && !candidates.some((item) => item.id === barberChoice)) setBarberChoice("any");
@@ -81,23 +90,21 @@ export function CustomerBooking({ services, barbers, vouchers, user, preset, onB
   }, [step, selectedIds.join(","), barberChoice, dayOffset, barbers]);
 
   function toggle(id: string) {
+    setSimulatedDeposit(null);
     setSelectedIds((items) => items.includes(id) ? items.filter((item) => item !== id) : items.length < 5 ? [...items, id] : items);
-  }
-  async function redeemPoints() {
-    setBusy(true); setError("");
-    try {
-      const result = await api<{ voucher: Voucher; user: User }>("/loyalty/redeem", { method: "POST" });
-      onUserUpdated(result.user, result.voucher); setVoucherCode(result.voucher.code);
-    } catch (err: any) { setError(err.message || "Không đổi được điểm."); }
-    finally { setBusy(false); }
   }
   async function submit() {
     if (!slot || !selectedIds.length || busy) return;
+    if (!depositStepComplete) {
+      setError("Vui lòng mô phỏng đặt cọc trước khi xác nhận lịch.");
+      return;
+    }
     setBusy(true); setError("");
     try {
       const item = await api<Appointment>("/appointments", { method: "POST", body: {
         barberId: slot.barberId, serviceId: selectedIds[0], serviceIds: selectedIds, startAt: slot.startAt,
-        note: note.trim(), styleName: preset?.styleName, paymentChoice: needsDeposit ? "prepay" : paymentChoice,
+        note: note.trim(), styleName: preset?.styleName, paymentChoice: "salon",
+        ...(needsDeposit ? { depositSimulationConfirmed: true } : {}),
         ...(voucherCode.trim() ? { voucherCode: voucherCode.trim().toUpperCase() } : {})
       } });
       onBooked(item);
@@ -108,6 +115,10 @@ export function CustomerBooking({ services, barbers, vouchers, user, preset, onB
   return <View style={{ gap: 14 }}>
     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><Text style={styles.subtitle}>Đặt lịch · Bước {step}/4</Text><Text style={styles.muted}>{selectedIds.length} dịch vụ · {duration} phút</Text></View>
     <View style={{ flexDirection: "row", gap: 5 }}>{[1, 2, 3, 4].map((n) => <View key={n} style={{ height: 5, borderRadius: 3, backgroundColor: n <= step ? colors.gold : colors.border, flex: 1 }} />)}</View>
+    <Card style={!canCreateAppointment ? { borderColor: colors.danger } : undefined}>
+      <Text style={styles.muted}>Lịch đang hoạt động: {activeAppointmentCount}/{MAX_ACTIVE_CUSTOMER_APPOINTMENTS}</Text>
+      {!canCreateAppointment && <><Text style={{ color: colors.danger }}>Bạn đã đạt giới hạn 3 lịch đang chờ hoặc đã xác nhận. Hãy hủy hoặc hoàn tất một lịch trước khi đặt thêm.</Text><Button title="Mở lịch của tôi" secondary onPress={onViewBookings} /></>}
+    </Card>
     <ErrorText message={error} />
     {step === 1 && <>
       <Text style={styles.subtitle}>Chọn dịch vụ</Text>
@@ -150,22 +161,23 @@ export function CustomerBooking({ services, barbers, vouchers, user, preset, onB
           return <Pressable key={time} disabled={!found} onPress={() => { setSlot(found!); setStep(4); }} style={[styles.card, { padding: 9, minWidth: 70, opacity: found ? 1 : 0.35, alignItems: "center" }, slot?.startAt === found?.startAt && found && { backgroundColor: colors.gold }]}><Text style={[styles.text, slot?.startAt === found?.startAt && found && { color: colors.dark }]}>{time}</Text></Pressable>;
         })}
       </View>}
-      {!slotsLoading && !slots.length && <Text style={styles.muted}>Ngày này đã kín hoặc thợ nghỉ. Thử ngày khác.</Text>}
+      {!slotsLoading && !slots.length && <Text style={styles.muted}>Ngày này đã kín, thợ nghỉ hoặc trùng với lịch khác của bạn. Thử ngày khác.</Text>}
       <Button title="Quay lại dịch vụ / thợ" secondary onPress={() => setStep(2)} />
     </>}
     {step === 4 && <>
       <Text style={styles.subtitle}>Kiểm tra và xác nhận</Text>
       <Card style={{ borderColor: colors.gold }}><Text style={styles.text}>HairMatch{salonAddress ? ` · ${salonAddress}` : ""}</Text><Text style={styles.text}>{slot && dateTimeLabel(slot.startAt)} · {duration} phút</Text><Text style={styles.text}>Thợ: {selectedBarber?.name}</Text>{selected.map((item) => <Text key={item.id} style={styles.muted}>{item.name} · {money(price(item))}</Text>)}{preset?.styleName && <Text style={styles.muted}>Kiểu mong muốn: {preset.styleName}</Text>}<Text style={[styles.subtitle, { color: colors.gold }]}>Tạm tính {money(total)}</Text></Card>
       <Field label="Ghi chú cho thợ (tùy chọn)" value={note} onChange={setNote} multiline />
-      <Field label="Mã ưu đãi" value={voucherCode} onChange={setVoucherCode} />
+      <Field label="Mã ưu đãi" value={voucherCode} onChange={(value) => { setVoucherCode(value); setSimulatedDeposit(null); }} />
       {!!voucherCode.trim() && !voucherApplicable && <Text style={styles.muted}>Mã chưa áp dụng cho ngày/giờ này hoặc đã hết lượt.</Text>}
       <View style={styles.row}>{vouchers.slice(0, 3).map((item) => <Button key={item.id} title={item.code} secondary onPress={() => setVoucherCode(item.code)} />)}</View>
-      {(user.loyaltyPoints || 0) >= 100 && <Button title="Đổi 100 điểm lấy mã giảm 50.000đ" secondary disabled={busy} onPress={() => void redeemPoints()} />}
       <Text style={styles.text}>Tổng dự kiến: {money(total - estimatedDiscount)}{estimatedDiscount > 0 ? ` · giảm ${money(estimatedDiscount)}` : ""}</Text>
-      <Choice value={needsDeposit ? "prepay" : paymentChoice} onChange={(value) => setPaymentChoice(value as "salon" | "prepay")}
-        options={needsDeposit ? [{ label: `Đặt cọc mô phỏng ${money(deposit)}`, value: "prepay" }] : [{ label: "Thanh toán tại salon", value: "salon" }, { label: "Trả trước mô phỏng", value: "prepay" }]} />
-      <Text style={styles.muted}>{needsDeposit ? "Sau khi đặt lịch, hoàn tất đặt cọc mô phỏng trong Lịch của tôi. Salon chỉ xác nhận sau khi đặt cọc." : "Thanh toán mô phỏng không chuyển tiền thật."}</Text>
-      <View style={styles.row}><Button title="Quay lại" secondary onPress={() => setStep(3)} /><Button title={busy ? "Đang đặt..." : "Xác nhận đặt lịch"} disabled={busy} onPress={() => void submit()} /></View>
+      {needsDeposit ? <Card style={{ borderColor: colors.gold }}>
+        <Text style={styles.text}>Đơn từ 500.000 đ cần cọc {money(deposit)} (10% tổng tiền sau ưu đãi).</Text>
+        <Text style={styles.muted}>Đây là bước mô phỏng, không trừ tiền thật.</Text>
+        <Button title={simulatedDeposit === deposit ? `✓ Đã mô phỏng cọc ${money(deposit)}` : `Mô phỏng đặt cọc ${money(deposit)}`} secondary={simulatedDeposit === deposit} disabled={busy} onPress={() => { setSimulatedDeposit(deposit); setError(""); }} />
+      </Card> : <Text style={styles.muted}>Đơn dưới 500.000 đ không cần đặt cọc. Thanh toán tại salon sau khi sử dụng dịch vụ.</Text>}
+      <View style={styles.row}><Button title="Quay lại" secondary onPress={() => setStep(3)} /><Button title={busy ? "Đang đặt..." : "Xác nhận đặt lịch"} disabled={busy || !depositStepComplete || !canCreateAppointment} onPress={() => void submit()} /></View>
     </>}
   </View>;
 }

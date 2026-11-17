@@ -13,6 +13,9 @@ import type {
 } from "./models.js";
 import type { Repository } from "./repository.js";
 
+const MAX_ACTIVE_CUSTOMER_APPOINTMENTS = 3;
+const MAX_CUSTOMER_BOOKINGS_PER_24_HOURS = 5;
+
 export function validDate(value: string): boolean {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -32,6 +35,23 @@ export function scheduleBounds(schedule: WorkSchedule) {
   );
 
   return { start, end };
+}
+
+/** Lunch rotation for the full-time demo roster: the first pair, second pair, then an odd last barber. */
+export function rotatingLunch(barberIndex: number, startTime: string, endTime: string) {
+  if (startTime > "09:00" || endTime < "19:00") return undefined;
+  const startMinutes = 11 * 60 + 30 + Math.floor(Math.max(0, barberIndex) / 2) * 60;
+  const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return { lunchStartTime: format(startMinutes), lunchEndTime: format(startMinutes + 60) };
+}
+
+export function leaveDates(leave: { from: string; to: string; dates?: string[] }) {
+  if (leave.dates?.length) return [...new Set(leave.dates)].sort();
+  const dates: string[] = [];
+  for (let day = DateTime.fromISO(leave.from, { zone: SHOP_ZONE }); day <= DateTime.fromISO(leave.to, { zone: SHOP_ZONE }); day = day.plus({ days: 1 })) {
+    dates.push(day.toISODate()!);
+  }
+  return dates;
 }
 
 export function overlaps(
@@ -96,13 +116,22 @@ export class BookingService {
         DateTime.fromISO(appointment.startAt).toMillis(),
         DateTime.fromISO(appointment.endAt).toMillis()
       );
+    }) && !this.repo.schedules.all().some((schedule) => {
+      if (schedule.barberId !== barberId || schedule.date !== start.toISODate()) return false;
+      const lunch = schedule.lunchStartTime && schedule.lunchEndTime ? schedule : rotatingLunch(
+        this.repo.barbers.all().filter((barber) => barber.active).findIndex((barber) => barber.id === barberId), schedule.startTime, schedule.endTime
+      );
+      if (!lunch?.lunchStartTime || !lunch.lunchEndTime) return false;
+      const lunchStart = DateTime.fromISO(`${schedule.date}T${lunch.lunchStartTime}`, { zone: SHOP_ZONE });
+      const lunchEnd = DateTime.fromISO(`${schedule.date}T${lunch.lunchEndTime}`, { zone: SHOP_ZONE });
+      return overlaps(start.toMillis(), end.toMillis(), lunchStart.toMillis(), lunchEnd.toMillis());
     }) && !this.repo.blocks.all().some((block) => {
       if (block.barberId !== barberId || block.date !== start.toISODate()) return false;
       const bounds = scheduleBounds(block);
       return overlaps(start.toMillis(), end.toMillis(), bounds.start.toMillis(), bounds.end.toMillis());
     }) && !this.repo.leaves.all().some((leave) =>
       leave.barberId === barberId && leave.status === "approved" &&
-      !!start.toISODate() && start.toISODate()! >= leave.from && start.toISODate()! <= leave.to
+      !!start.toISODate() && leaveDates(leave).includes(start.toISODate()!)
     );
   }
 
@@ -135,11 +164,30 @@ export class BookingService {
     });
   }
 
+  private customerAvailable(
+    customerId: string,
+    start: DateTime,
+    end: DateTime,
+    exceptId?: string
+  ): boolean {
+    return !this.repo.appointments.all().some((appointment) => {
+      if (appointment.id === exceptId || appointment.customerId !== customerId || appointment.walkIn) return false;
+      if (appointment.status !== "pending" && appointment.status !== "confirmed" && appointment.status !== "in_progress") return false;
+      return overlaps(
+        start.toMillis(),
+        end.toMillis(),
+        DateTime.fromISO(appointment.startAt).toMillis(),
+        DateTime.fromISO(appointment.endAt).toMillis()
+      );
+    });
+  }
+
   availability(
     barberId: string,
     serviceId: string,
     date: string,
-    serviceIds?: string[]
+    serviceIds?: string[],
+    customerId?: string
   ): string[] {
     ensure(validDate(date), 400, "Ngày không hợp lệ.");
     const today = DateTime.now().setZone(SHOP_ZONE).startOf("day");
@@ -175,7 +223,8 @@ export class BookingService {
         if (
           start > now &&
           end <= bounds.end &&
-          this.available(barberId, start, end)
+          this.available(barberId, start, end) &&
+          (!customerId || this.customerAvailable(customerId, start, end))
         ) {
           slots.add(start.toISO()!);
         }
@@ -194,19 +243,38 @@ export class BookingService {
       startAt: string;
       note?: string;
       styleName?: string;
-      paymentChoice?: "salon" | "prepay";
+      paymentChoice?: "salon";
+      depositSimulationConfirmed?: boolean;
       aiSuggestion?: { haircutName: string; barberNote: string };
       voucherCode?: string;
       walkIn?: boolean;
     }
   ): Promise<Appointment> {
-    return this.mutex(input.barberId).runExclusive(() => {
+    return this.mutex(`customer:${user.id}`).runExclusive(() =>
+      this.mutex(`barber:${input.barberId}`).runExclusive(() => {
+      const now = DateTime.now();
+      const customerBookings = this.repo.appointments.all().filter((appointment) =>
+        appointment.customerId === user.id && !appointment.walkIn
+      );
+      const activeBookings = customerBookings.filter((appointment) =>
+        appointment.status === "in_progress" ||
+        ((appointment.status === "pending" || appointment.status === "confirmed") &&
+          DateTime.fromISO(appointment.startAt).toMillis() > now.toMillis())
+      );
+      ensure(activeBookings.length < MAX_ACTIVE_CUSTOMER_APPOINTMENTS, 429,
+        `Bạn đã có ${MAX_ACTIVE_CUSTOMER_APPOINTMENTS} lịch đang hoạt động. Hãy hoàn tất hoặc hủy một lịch trước khi đặt thêm.`);
+      const recentBookingCount = customerBookings.filter((appointment) =>
+        DateTime.fromISO(appointment.createdAt).toMillis() > now.minus({ hours: 24 }).toMillis()
+      ).length;
+      ensure(recentBookingCount < MAX_CUSTOMER_BOOKINGS_PER_24_HOURS, 429,
+        `Bạn đã gửi tối đa ${MAX_CUSTOMER_BOOKINGS_PER_24_HOURS} yêu cầu đặt lịch trong 24 giờ. Vui lòng thử lại sau.`);
+
       const barber = this.repo.barbers.get(input.barberId);
       const services = this.selectedServices(input.serviceId, input.serviceIds);
       const service = services[0];
 
       ensure(barber?.active, 404, "Thợ không hoạt động.");
-      ensure(!user.blacklisted && (user.noShowCount || 0) < 2, 403, "Tài khoản cần gọi hotline để đặt lịch do đã vắng mặt 2 lần.");
+      ensure(!user.blacklisted, 403, "Tài khoản hiện không thể đặt lịch. Vui lòng liên hệ salon.");
       ensure(!barber.serviceIds || services.every((item) => barber.serviceIds!.includes(item.id)), 400, "Thợ không thực hiện đủ dịch vụ đã chọn.");
 
       ensure(
@@ -261,14 +329,17 @@ export class BookingService {
         409,
         "Khung giờ đã được đặt. Vui lòng chọn giờ khác."
       );
+      ensure(input.walkIn || this.customerAvailable(user.id, start, end), 409,
+        "Bạn đã có lịch hẹn khác trong khung giờ này. Vui lòng chọn giờ khác.");
 
       const serviceItems = services.map((item) => ({ id: item.id, name: item.name,
         price: item.promotionPrice ?? item.price, durationMinutes: item.durationMinutes }));
       const basePrice = serviceItems.reduce((total, item) => total + item.price, 0);
       const { discount, voucher } = this.voucherDiscount(input.voucherCode, basePrice, start, true, user.id);
-      const depositRequired = services.some((item) => item.category === "chemical")
-        ? Math.min(100000, Math.max(50000, Math.round((basePrice - discount) * 0.2 / 10000) * 10000)) : 0;
-      ensure(input.walkIn || !depositRequired || input.paymentChoice === "prepay", 400, "Dịch vụ hóa chất cần đặt cọc mô phỏng trước khi xác nhận lịch.");
+      const payableTotal = basePrice - discount;
+      const depositRequired = payableTotal >= 500000 ? Math.round(payableTotal * 0.1) : 0;
+      ensure(input.walkIn || depositRequired === 0 || input.depositSimulationConfirmed === true, 400,
+        "Vui lòng mô phỏng đặt cọc trước khi xác nhận lịch.");
 
       const appointment: Appointment = {
         id: randomUUID(),
@@ -284,8 +355,12 @@ export class BookingService {
         priceSnapshot: basePrice - discount,
         ...(input.note ? { note: input.note } : {}),
         ...(input.styleName ? { styleName: input.styleName } : {}),
-        paymentChoice: input.paymentChoice || "salon",
+        paymentChoice: "salon",
         depositRequired: input.walkIn ? 0 : depositRequired,
+        ...(depositRequired > 0 && input.depositSimulationConfirmed ? {
+          depositSimulationConfirmed: true,
+          depositSimulationAmount: depositRequired
+        } : {}),
         ...(input.walkIn ? { walkIn: true } : {}),
         ...(voucher ? { voucherCode: voucher.code, discountAmount: discount } : {}),
         durationSnapshot: serviceItems.reduce((total, item) => total + item.durationMinutes, 0),
@@ -305,11 +380,14 @@ export class BookingService {
         title: "Đặt lịch thành công", body: `Lịch ${appointment.serviceNameSnapshot} lúc ${start.toFormat("HH:mm dd/MM")}, đang chờ xác nhận.`,
         kind: "booking", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
       return appointment;
-    });
+    }));
   }
 
   async reschedule(id: string, input: { barberId: string; serviceId: string; serviceIds?: string[]; startAt: string }): Promise<Appointment> {
-    return this.mutex(input.barberId).runExclusive(() => {
+    const initial = this.repo.appointments.get(id);
+    ensure(initial, 404, "Không tìm thấy lịch hẹn.");
+    return this.mutex(`customer:${initial.customerId}`).runExclusive(() =>
+      this.mutex(`barber:${input.barberId}`).runExclusive(() => {
       const existing = this.repo.appointments.get(id);
       ensure(existing, 404, "Không tìm thấy lịch hẹn.");
       ensure(existing.status === "pending" || existing.status === "confirmed", 409, "Chỉ có thể sửa lịch chưa bắt đầu.");
@@ -332,6 +410,8 @@ export class BookingService {
       });
       ensure(fitsSchedule, 400, "Khung giờ không nằm trong lịch làm việc.");
       ensure(this.available(barber.id, start, end, id), 409, "Khung giờ đã được đặt. Vui lòng chọn giờ khác.");
+      ensure(this.customerAvailable(existing.customerId, start, end, id), 409,
+        "Khách đã có lịch hẹn khác trong khung giờ này. Vui lòng chọn giờ khác.");
       ensure(!existing.voucherCode || JSON.stringify(existing.serviceIds || [existing.serviceId]) === JSON.stringify(services.map((item) => item.id)), 409, "Hãy giữ nguyên dịch vụ khi lịch có mã giảm giá.");
       const serviceItems = services.map((item) => ({ id: item.id, name: item.name,
         price: item.promotionPrice ?? item.price, durationMinutes: item.durationMinutes }));
@@ -354,7 +434,7 @@ export class BookingService {
       };
       this.repo.appointments.put(updated);
       return updated;
-    });
+    }));
   }
 
   cancel(user: User, id: string, reason: string): Appointment {
@@ -430,7 +510,6 @@ export class BookingService {
     }
 
     if (status === "confirmed") {
-      ensure(!appointment.depositRequired || (appointment.simulatedPaid || 0) >= appointment.depositRequired, 409, "Khách chưa hoàn tất đặt cọc mô phỏng.");
       ensure(
         DateTime.fromISO(appointment.startAt) > DateTime.now(),
         409,
@@ -442,7 +521,7 @@ export class BookingService {
       ensure(DateTime.fromISO(appointment.startAt) <= DateTime.now(), 409, "Chưa đến giờ hẹn.");
     }
     if (status === "completed" && payment) {
-      ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot - (appointment.simulatedPaid || 0), 400, "Số tiền thực thu không hợp lệ.");
+      ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot, 400, "Số tiền thực thu không hợp lệ.");
     }
 
     if (status === "cancelled") {
@@ -450,7 +529,7 @@ export class BookingService {
     }
 
     const commissionRateSnapshot = appointment.commissionRateSnapshot ?? (this.repo.barbers.get(appointment.barberId)?.commissionRate || 0);
-    const amountPaid = payment ? payment.amount + (appointment.simulatedPaid || 0) : undefined;
+    const amountPaid = payment ? payment.amount : undefined;
     const updated: Appointment = { ...appointment, status,
       ...(status === "cancelled" ? { cancelReason: cancelReason!.trim() } : {}),
       ...(status === "in_progress" ? { startedAt: new Date().toISOString() } : {}),
@@ -460,10 +539,6 @@ export class BookingService {
       } : {})
     };
     this.repo.appointments.put(updated);
-    if (status === "no_show" && !appointment.walkIn) {
-      const customer = this.repo.users.get(appointment.customerId);
-      if (customer) this.repo.users.put({ ...customer, noShowCount: (customer.noShowCount || 0) + 1 });
-    }
     if (status === "cancelled" || status === "no_show") this.releaseVoucher(appointment);
     if (status === "confirmed" || status === "cancelled" || status === "no_show") {
       const title = status === "confirmed" ? "Salon đã xác nhận lịch hẹn" : status === "no_show" ? "Lịch hẹn được ghi nhận vắng mặt" : "Salon đã hủy lịch hẹn";
@@ -475,9 +550,6 @@ export class BookingService {
       this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId, title: "Thợ đã bắt đầu phục vụ",
         body: `${appointment.serviceNameSnapshot} · ${DateTime.fromISO(appointment.startAt).setZone(SHOP_ZONE).toFormat("HH:mm dd/MM")}`,
         kind: "booking", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
-    }
-    if (status === "completed" && payment && !appointment.walkIn) {
-      this.awardLoyalty(updated, amountPaid || 0);
     }
     if (status === "completed" && !appointment.walkIn) {
       this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId,
@@ -493,24 +565,14 @@ export class BookingService {
     ensure(appointment, 404, "Không tìm thấy lịch hẹn.");
     ensure(appointment.status === "completed", 409, "Chỉ xác nhận thanh toán cho ca đã hoàn thành.");
     ensure(!isAppointmentPaymentConfirmed(appointment), 409, "Lịch này đã được xác nhận thanh toán.");
-    ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot - (appointment.simulatedPaid || 0), 400, "Số tiền thực thu không hợp lệ.");
-    const amountPaid = payment.amount + (appointment.simulatedPaid || 0);
+    ensure(Number.isFinite(payment.amount) && payment.amount >= 0 && payment.amount <= appointment.priceSnapshot, 400, "Số tiền thực thu không hợp lệ.");
+    const amountPaid = payment.amount;
     const commissionRateSnapshot = appointment.commissionRateSnapshot ?? (this.repo.barbers.get(appointment.barberId)?.commissionRate || 0);
     const updated: Appointment = { ...appointment, paymentMethod: payment.method, amountPaid,
       paymentConfirmedAt: new Date().toISOString(), paymentConfirmedBy: adminId,
       commissionRateSnapshot, commissionAmount: Math.round(amountPaid * commissionRateSnapshot / 100) };
     this.repo.appointments.put(updated);
-    if (!appointment.walkIn) this.awardLoyalty(updated, amountPaid);
     return updated;
-  }
-
-  private awardLoyalty(appointment: Appointment, amountPaid: number) {
-    const points = Math.floor(amountPaid / 10000);
-    const customer = this.repo.users.get(appointment.customerId);
-    if (customer && points) this.repo.users.put({ ...customer, loyaltyPoints: (customer.loyaltyPoints || 0) + points });
-    if (points) this.repo.notifications.put({ id: randomUUID(), customerId: appointment.customerId,
-      title: `Bạn nhận ${points} điểm thưởng`, body: `Số dư mới: ${(customer?.loyaltyPoints || 0) + points} điểm. Đổi 100 điểm lấy mã giảm 50.000đ.`,
-      kind: "loyalty", appointmentId: appointment.id, createdAt: new Date().toISOString(), read: false });
   }
 }
 
